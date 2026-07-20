@@ -24,6 +24,8 @@ from .robot import Robot
 class Simulation:
     """A complete step-driven Caiman swarm mission; no background loop is required."""
 
+    TERMINAL_PHASES = {"COMPLETE", "ABORTED_CAPTURE"}
+
     def __init__(self, config: SimulationConfig | None = None) -> None:
         self.config = config or SimulationConfig()
         self.rng = np.random.default_rng(self.config.seed)
@@ -70,6 +72,17 @@ class Simulation:
         # fix with the full accumulated outage time applied again.
         self.estimator_anchors: dict[str, dict[str, Any]] = {}
         self.pending_sample_count = 0
+        # Physical-capture response. A submerged AUV cannot receive an RF
+        # recall: it finishes its current programmed leg, surfaces, receives
+        # RETURN_HOME, and only then heads to the vessel.
+        self.captured_robot_ids: set[str] = set()
+        self.compromised_key_id: int | None = None
+        self.security_recall_received: set[str] = set()
+        self.security_recovered: set[str] = set()
+        self.revoked_robot_ids: set[str] = set()
+        self.security_rekey_complete = False
+        self.security_rotation_key_id: int | None = None
+        self.mission_outcome = "ACTIVE"
         # Small coastal exclusion zones stay outside the planned transects.
         self.obstacles = [
             {"x0": 92.0, "x1": 132.0, "y0": 108.0, "y1": 172.0},
@@ -154,13 +167,13 @@ class Simulation:
             {"x0": 940.0, "x1": 978.0, "y0": 505.0, "y1": 575.0},
         ] if desired.obstacles_enabled else []
         self.sync_position = self._surface_standoff(self.rendezvous_position)
-        if self.deployed and self.mission_phase != "RETURNING_TO_VESSEL":
+        if self.deployed and self.mission_phase not in {"RETURNING_TO_VESSEL", "SECURITY_RECALL", "ABORTED_CAPTURE"}:
             self.vessel_target = Position(self.sync_position.x, self.sync_position.y, 0.0)
 
     def deploy(self) -> None:
         """Launch five surveyors sharing store-carry-forward duty at rendezvous."""
         if self.deployed:
-            if not self.running and self.mission_phase != "COMPLETE":
+            if not self.running and self.mission_phase not in self.TERMINAL_PHASES:
                 self.start()
             return
         robot_ids = list(self.robots)
@@ -191,7 +204,7 @@ class Simulation:
         if not self.deployed:
             self.events.add(self.time, "mission", "Start ignored", "Deploy the robots first", "warning")
             return
-        if not self.running and self.mission_phase != "COMPLETE":
+        if not self.running and self.mission_phase not in self.TERMINAL_PHASES:
             self.running = True
             self.events.add(self.time, "mission", "Mission resumed")
 
@@ -200,7 +213,7 @@ class Simulation:
         self.events.add(self.time, "mission", "Mission paused")
 
     def step(self, force: bool = False) -> None:
-        if not self.deployed or self.mission_phase == "COMPLETE":
+        if not self.deployed or self.mission_phase in self.TERMINAL_PHASES:
             return
         if not self.running and not force:
             return
@@ -223,12 +236,12 @@ class Simulation:
                 self.events.add(self.time, "network", "Temporary outage", robot.robot_id, "warning")
             previous = Position(robot.position.x, robot.position.y, robot.position.depth)
             robot.update(dt, self.config.width, self.config.height, self.rng, peers)
-            if robot.state == RobotState.HOLDING and self.mission_phase not in {"RETURNING_TO_VESSEL", "COMPLETE"}:
+            if robot.state == RobotState.HOLDING and self.mission_phase not in {"RETURNING_TO_VESSEL", "SECURITY_RECALL", *self.TERMINAL_PHASES}:
                 robot.operational_idle_seconds += dt
             if self._inside_obstacle(robot.position):
                 robot.position = previous
                 self.events.add(self.time, "mission", "Obstacle avoided", robot.robot_id)
-            if robot.role == "SURVEY":
+            if robot.role == "SURVEY" and robot.online:
                 bottom = self.bathymetry.depth_at(robot.position.x, robot.position.y)
                 altitude = max(0.0, bottom - robot.position.depth)
                 beam_radius = self.bathymetry.sonar_footprint_radius(altitude)
@@ -263,12 +276,15 @@ class Simulation:
 
     def step_many(self, count: int, force: bool = True) -> None:
         for _ in range(max(0, int(count))):
-            if self.mission_phase == "COMPLETE":
+            if self.mission_phase in self.TERMINAL_PHASES:
                 break
             self.step(force=force)
 
     def _advance_store_and_forward_cycle(self, survey_robots: list[Robot]) -> None:
         if not survey_robots:
+            return
+        if self.mission_phase == "SECURITY_RECALL":
+            self._advance_security_recall()
             return
         if self.mission_phase == "RETURNING_TO_VESSEL":
             if all(robot.position.distance_to(self.base.position) < 3.0 for robot in self.robots.values()):
@@ -640,7 +656,165 @@ class Simulation:
                 command.status = CommandStatus.FAILED
                 self.events.add(self.time, "network", "Command failed", command.command_id, "error")
 
+    def capture_robot(self, robot_id: str) -> None:
+        """Simulate physical loss of an AUV and start a radio-realistic recall."""
+        if robot_id not in self.robots:
+            raise KeyError(robot_id)
+        if not self.deployed:
+            raise RuntimeError("The fleet must be deployed before a capture can be simulated")
+        if self.mission_phase in self.TERMINAL_PHASES:
+            raise RuntimeError("The mission is already terminal")
+        if self.captured_robot_ids:
+            raise RuntimeError("A physical-capture recovery is already in progress")
+        robot = self.robots[robot_id]
+        if robot.captured:
+            return
+
+        robot.captured = True
+        robot.forced_offline = True
+        robot.temporary_offline_until = 0.0
+        robot.state = RobotState.CAPTURED
+        robot.waypoint = None
+        robot.assigned_waypoints = []
+        robot.route_complete = True
+        self.captured_robot_ids.add(robot_id)
+        self.fleet_sync_pending.discard(robot_id)
+        self.batch_arrived.discard(robot_id)
+        self.compromised_key_id = self.base.keys.current_key_id
+        self.mission_phase = "SECURITY_RECALL"
+        self.mission_outcome = "ABORTING_AFTER_CAPTURE"
+        self.running = True
+        self.events.add(
+            self.time,
+            "security",
+            "PHYSICAL CAPTURE CONFIRMED",
+            f"{robot_id}; key_id={self.compromised_key_id} assumed compromised",
+            "error",
+        )
+        self.events.add(
+            self.time,
+            "security",
+            "Surface-only fleet recall armed",
+            "Submerged AUVs continue their signed route until the next RF contact",
+            "warning",
+        )
+
+    def _advance_security_recall(self) -> None:
+        survivors = [robot for robot in self.robots.values() if not robot.captured]
+        if not survivors:
+            self.mission_phase = "ABORTED_CAPTURE"
+            self.mission_outcome = "ABORTED_CAPTURE"
+            self.running = False
+            return
+
+        # Keep the vessel moving to the already-published rendezvous. Sending
+        # a recall while the vessel is still moving would make the home point
+        # stale and would create an artificial-looking correction.
+        if self.vessel_target is not None and self.base.position.distance_to(self.vessel_target) > 1.0:
+            return
+
+        connected = self.network.connected_to_base() - {"BASE"}
+        for robot in survivors:
+            if robot.robot_id in self.security_recall_received:
+                continue
+            if robot.robot_id not in connected or robot.position.depth > 0.5:
+                continue
+            robot.home = Position(self.base.position.x, self.base.position.y, 0.0)
+            command = self.send_command(
+                robot.robot_id,
+                CommandType.RETURN_HOME,
+                {"reason": "physical_capture", "compromised_key_id": self.compromised_key_id},
+            )
+            if command.status in {CommandStatus.DELIVERED, CommandStatus.ACKNOWLEDGED}:
+                self._assign_known_route(robot, [Position(self.base.position.x, self.base.position.y, 0.0)])
+                robot.state = RobotState.RETURNING_HOME
+                self.security_recall_received.add(robot.robot_id)
+                self.events.add(
+                    self.time,
+                    "security",
+                    "Recall received at surface",
+                    f"{robot.robot_id}; encrypted with compromised key {self.compromised_key_id}",
+                    "warning",
+                )
+
+        for robot in survivors:
+            if (
+                robot.robot_id in self.security_recall_received
+                and robot.position.depth <= 0.5
+                and robot.position.distance_to(self.base.position) < 3.0
+            ):
+                if robot.robot_id not in self.security_recovered:
+                    self.security_recovered.add(robot.robot_id)
+                    robot.state = RobotState.HOLDING
+                    self.events.add(self.time, "mission", "AUV physically recovered", robot.robot_id)
+
+        if len(self.security_recovered) == len(survivors):
+            self._complete_capture_recovery(survivors)
+
+    def _complete_capture_recovery(self, survivors: list[Robot]) -> None:
+        """Rotate to a survivor-only key and erase the compromised key ashore."""
+        old_id = int(self.compromised_key_id or self.base.keys.current_key_id)
+        survivor_ids = [robot.robot_id for robot in survivors]
+        if self.security_rotation_key_id is None:
+            new_key = self.base.prepare_rotation(survivor_ids)
+            self.security_rotation_key_id = new_key.key_id
+            self.events.add(
+                self.time,
+                "security",
+                "Survivor-only rekey started",
+                f"{old_id} -> {new_key.key_id}; excluded={sorted(self.captured_robot_ids)}",
+            )
+        new_id = self.security_rotation_key_id
+        new_material = self.base.keys.get(new_id)
+        payload = {"key_id": new_id, "key_material": base64.b64encode(new_material.master).decode()}
+        for robot in survivors:
+            if self.base.key_rotation_status.get(robot.robot_id):
+                continue
+            for attempt in range(1, self.config.max_retries + 1):
+                frame = self._frame("BASE", robot.robot_id, MessageType.KEY_ROTATE, payload, key_id=old_id)
+                self.network.transmit(frame, self.time, self._handle_delivery, attempt=attempt)
+                if self.base.key_rotation_status.get(robot.robot_id):
+                    break
+                self.network.metrics.retries += 1
+        if not all(self.base.key_rotation_status.get(robot_id, False) for robot_id in survivor_ids):
+            return
+
+        # Capture recovery has no grace period: retain only the new material on
+        # trusted nodes. The captured AUV still has the old (now useless) key.
+        for node in [self.base, *survivors]:
+            material = node.keys.get(new_id)
+            node.keys.keys = {new_id: material}
+            node.keys.current_key_id = new_id
+        self.revoked_robot_ids.update(self.captured_robot_ids)
+        self.security_rekey_complete = True
+        self.mission_phase = "ABORTED_CAPTURE"
+        self.mission_outcome = "ABORTED_CAPTURE"
+        self.running = False
+        self.events.add(
+            self.time,
+            "security",
+            "Captured AUV revoked",
+            f"revoked={sorted(self.revoked_robot_ids)}; active_key_id={new_id}",
+            "error",
+        )
+        self.events.add(
+            self.time,
+            "mission",
+            "Security recovery complete",
+            f"{len(survivors)} survivors aboard; bathymetric mission aborted",
+            "warning",
+        )
+
     def rotate_key(self) -> int:
+        if self.captured_robot_ids:
+            self.events.add(
+                self.time,
+                "security",
+                "Manual key rotation blocked",
+                "Capture protocol owns survivor rekey until physical recovery is complete",
+                "warning",
+            )
+            return self.base.keys.current_key_id
         if self.config.communication_profile == CommunicationProfile.NRF24_SURFACE:
             connected = self.network.connected_to_base() - {"BASE"}
             if connected != set(self.robots):
@@ -706,6 +880,9 @@ class Simulation:
 
     def set_robot_offline(self, robot_id: str, offline: bool = True) -> None:
         robot = self.robots[robot_id]
+        if robot.captured and not offline:
+            self.events.add(self.time, "fault", "Restore rejected", f"{robot_id} is physically captured", "error")
+            return
         robot.forced_offline = offline
         if offline:
             robot.state = RobotState.OFFLINE
@@ -752,6 +929,8 @@ class Simulation:
             live = robot.robot_id in connected and age is not None and age <= max(2.0, robot.telemetry_interval + 1.0)
             if not self.deployed:
                 position_status = "ON DECK"
+            elif robot.captured:
+                position_status = "CAPTURED LAST FIX"
             elif live:
                 position_status = "LIVE RF"
             else:
@@ -760,9 +939,11 @@ class Simulation:
             rows.append({
                 "robot_id": robot.robot_id,
                 "role": robot.role,
+                "captured": robot.captured,
+                "revoked": robot.robot_id in self.revoked_robot_ids,
                 "is_data_mule": robot.robot_id == self.courier_id and self.mission_phase == "SYNCING_WITH_VESSEL",
                 "deployed": robot.deployed,
-                "state": report.get("state", "UNKNOWN"),
+                "state": RobotState.CAPTURED.value if robot.captured else report.get("state", "UNKNOWN"),
                 "x": report.get("x"),
                 "y": report.get("y"),
                 "depth": report.get("depth"),
@@ -795,6 +976,10 @@ class Simulation:
             float(report.get("depth", 0.0)),
         )
         report_timestamp = float(report.get("timestamp", self.time))
+        if robot.captured:
+            age = max(0.0, self.time - report_timestamp)
+            diagonal = (self.config.width**2 + self.config.height**2) ** 0.5
+            return report_position, min(diagonal, 3.0 + 0.15 * age)
         anchor = self.estimator_anchors.get(robot_id)
         report_matches_plan = int(report.get("route_revision", -1)) == robot.route_revision
         anchor_matches_plan = anchor is not None and int(anchor["route_revision"]) == robot.route_revision
@@ -970,6 +1155,14 @@ class Simulation:
             "key_id": self.base.keys.current_key_id,
             "fingerprint": self.base.keys.get().fingerprint,
             "nonces_generated": sum(node.sequence for node in [self.base, *self.robots.values()]),
+            "mission_outcome": self.mission_outcome,
+            "captured_robots": len(self.captured_robot_ids),
+            "captured_robot_ids": sorted(self.captured_robot_ids),
+            "compromised_key_id": self.compromised_key_id,
+            "security_recall_received": sorted(self.security_recall_received),
+            "security_recovered": sorted(self.security_recovered),
+            "revoked_robot_ids": sorted(self.revoked_robot_ids),
+            "security_rekey_complete": self.security_rekey_complete,
         }
 
     def export(self, output_dir: str = "exports") -> dict[str, Any]:

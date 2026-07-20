@@ -226,6 +226,42 @@ def test_key_rotation_is_deferred_while_nrf_robots_are_submerged():
     assert sim.events.records[-1]["event"] == "Key rotation deferred"
 
 
+def test_physical_capture_recalls_survivors_only_after_surface_contact_and_rekeys():
+    sim = Simulation(SimulationConfig(robot_count=5, packet_loss=0))
+    sim.deploy()
+    sim.step_many(100)
+    assert all(robot.position.depth > 0.5 for robot in sim.robots.values())
+    old_key_id = sim.base.keys.current_key_id
+
+    sim.capture_robot("R1")
+
+    assert sim.mission_phase == "SECURITY_RECALL"
+    assert sim.compromised_key_id == old_key_id
+    assert sim.robots["R1"].captured
+    assert not sim.robots["R1"].online
+    assert sim.security_recall_received == set()  # no fictional underwater RF
+    captured_fix = sim.estimated_position("R1")[0]
+    sim.step_many(2_000)
+
+    assert sim.mission_phase == "ABORTED_CAPTURE"
+    assert not sim.running
+    assert sim.security_recall_received == {"R2", "R3", "R4", "R5"}
+    assert sim.security_recovered == {"R2", "R3", "R4", "R5"}
+    assert sim.revoked_robot_ids == {"R1"}
+    assert sim.security_rekey_complete
+    assert sim.base.keys.current_key_id == old_key_id + 1
+    assert set(sim.base.keys.keys) == {old_key_id + 1}
+    for robot_id in ("R2", "R3", "R4", "R5"):
+        robot = sim.robots[robot_id]
+        assert robot.position.distance_to(sim.base.position) < 3.0
+        assert set(robot.keys.keys) == {old_key_id + 1}
+    assert sim.robots["R1"].keys.current_key_id == old_key_id
+    assert old_key_id + 1 not in sim.robots["R1"].keys.keys
+    # The PC freezes the captured node at its last fix instead of leaking the
+    # simulator's hidden physical position or inventing continued tracking.
+    assert sim.estimated_position("R1")[0] == captured_fix
+
+
 def test_tamper_and_route_mac_attacks_are_rejected(chain_sim):
     assert not chain_sim.inject_tampered_ciphertext("R1")
     assert chain_sim.robots["R1"].security.authentication_failures == 1

@@ -30,6 +30,7 @@ class Robot:
     telemetry_history: list[Telemetry] = field(default_factory=list)
     leak: bool = False
     forced_offline: bool = False
+    captured: bool = False
     temporary_offline_until: float = 0.0
     last_packet_received: float | None = None
     current_draw: float = 0.3
@@ -58,7 +59,7 @@ class Robot:
 
     @property
     def online(self) -> bool:
-        return not self.forced_offline and self.state != RobotState.OFFLINE
+        return not self.captured and not self.forced_offline and self.state not in {RobotState.OFFLINE, RobotState.CAPTURED}
 
     def next_sequence(self) -> int:
         value = self.sequence

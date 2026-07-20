@@ -84,9 +84,11 @@ with st.sidebar:
         or not hasattr(sim, "rendezvous_positions")
         or not hasattr(sim, "pending_telemetry_sync")
         or not hasattr(sim, "cleanup_passes")
+        or not hasattr(sim, "capture_robot")
+        or not hasattr(sim, "captured_robot_ids")
         or not hasattr(sim.base, "telemetry_history_by_robot")
         or any(
-            not hasattr(robot, "route_revision") or not hasattr(robot, "operational_idle_seconds")
+            not hasattr(robot, "route_revision") or not hasattr(robot, "operational_idle_seconds") or not hasattr(robot, "captured")
             for robot in sim.robots.values()
         )
     ):
@@ -119,13 +121,14 @@ with st.sidebar:
     if not sim.deployed and st.button("Deploy fleet", type="primary", use_container_width=True):
         sim.deploy()
         st.rerun()
-    if controls[0].button("Start / Resume", use_container_width=True, disabled=not sim.deployed):
+    terminal = sim.mission_phase in sim.TERMINAL_PHASES
+    if controls[0].button("Start / Resume", use_container_width=True, disabled=not sim.deployed or terminal):
         sim.start()
-    if controls[1].button("Pause", use_container_width=True, disabled=not sim.deployed):
+    if controls[1].button("Pause", use_container_width=True, disabled=not sim.deployed or terminal):
         sim.pause()
-    if controls[0].button("Step ×1", use_container_width=True, disabled=not sim.deployed):
+    if controls[0].button("Step ×1", use_container_width=True, disabled=not sim.deployed or terminal):
         sim.step(force=True)
-    if controls[1].button("Step ×10", use_container_width=True, disabled=not sim.deployed):
+    if controls[1].button("Step ×10", use_container_width=True, disabled=not sim.deployed or terminal):
         sim.step_many(10)
     if st.button("Export logs", use_container_width=True):
         paths = sim.export(str(Path(__file__).parent / "exports"))
@@ -166,10 +169,21 @@ with mission_tab:
         st.info("All AUVs are secured on the survey vessel. Deploy the fleet to begin the coordinated bathymetric search.")
     elif summary["connected_robots"] < len(sim.robots) and sim.mission_phase in {"DEPLOYING", "SURVEYING"}:
         st.info("Submerged robots are radio-silent. Open markers with '?' are last-known RF fixes; gold diamonds (~R) are plan/dead-reckoning predictions with growing uncertainty circles. Neither is hidden ground truth. New fixes arrive at a surface rendezvous.")
+    if sim.mission_phase == "SECURITY_RECALL":
+        st.error(
+            f"PHYSICAL CAPTURE: {', '.join(summary['captured_robot_ids'])}. Key {summary['compromised_key_id']} is assumed compromised. "
+            f"Recall received by {len(summary['security_recall_received'])}/{len(sim.robots) - summary['captured_robots']} survivors; "
+            f"{len(summary['security_recovered'])} are back at the vessel. Submerged AUVs cannot receive the recall until surfacing."
+        )
+    elif sim.mission_phase == "ABORTED_CAPTURE":
+        st.error(
+            f"Mission aborted after capture. Survivors recovered: {len(summary['security_recovered'])}; "
+            f"revoked: {', '.join(summary['revoked_robot_ids'])}; survivor key {summary['key_id']} active."
+        )
     objective = st.columns(6)
     objective[0].metric("Survey region", "~0.34 km²")
     objective[1].metric("Fleet total", len(sim.robots))
-    objective[2].metric("Working survey AUVs", sum(robot.role == "SURVEY" for robot in sim.robots.values()))
+    objective[2].metric("Working survey AUVs", sum(robot.role == "SURVEY" and not robot.captured for robot in sim.robots.values()))
     objective[3].metric("Backbone carriers", len(sim.robots) if sim.mission_phase == "SYNCING_WITH_VESSEL" else "all at RV")
     objective[4].metric("PC mapped", f"{summary['survey_coverage']:.1%}", help="Only bathymetry already delivered to the vessel computer.")
     objective[5].metric("Productive utilization", f"{summary['productive_utilization']:.1%}", help=f"Fleet work time excluding recovery. Only {summary['operational_idle_seconds']:.0f} AUV·s of discrete holding; early arrivals receive active sonar patrols.")
@@ -247,6 +261,14 @@ with security_tab:
     b.metric("Key ID", summary["key_id"])
     c.metric("Fingerprint", summary["fingerprint"])
     d.metric("Provisioned", f"{sum(r.keys.current_key_id == summary['key_id'] for r in sim.robots.values())}/{len(sim.robots)}")
+    if summary["captured_robots"]:
+        capture_status = st.columns(5)
+        capture_status[0].metric("Captured", ", ".join(summary["captured_robot_ids"]))
+        capture_status[1].metric("Compromised key", summary["compromised_key_id"])
+        capture_status[2].metric("Recall received", len(summary["security_recall_received"]))
+        capture_status[3].metric("Recovered", len(summary["security_recovered"]))
+        capture_status[4].metric("Rekey / revoke", "DONE" if summary["security_rekey_complete"] else "WAITING")
+        st.caption("The captured node is never shown as live. Its red X is only the vessel PC's last received RF fix.")
     security_rows = {
         "Nonces generated": summary["nonces_generated"], "Decrypt success": summary["decrypt_success"],
         "Authentication failures": summary["authentication_failures"], "Invalid route MAC": summary["invalid_route_mac"],
@@ -273,9 +295,20 @@ with security_tab:
     st.json(sim.base.key_rotation_status)
     st.markdown("#### Fault injection")
     fault_robot = st.selectbox("Robot", list(sim.robots), key="fault_robot")
+    selected_fault_robot = sim.robots[fault_robot]
+    capture_disabled = not sim.deployed or bool(sim.captured_robot_ids) or sim.mission_phase in sim.TERMINAL_PHASES
+    if st.button(
+        "SIMULATE PHYSICAL CAPTURE — abort and recall fleet",
+        type="primary",
+        use_container_width=True,
+        disabled=capture_disabled,
+        help="Marks the current group key compromised. Submerged AUVs receive RETURN_HOME only at their next real surface RF contact.",
+    ):
+        sim.capture_robot(fault_robot)
+        st.rerun()
     f1, f2, f3, f4 = st.columns(4)
     if f1.button("Offline", use_container_width=True): sim.set_robot_offline(fault_robot, True)
-    if f2.button("Restore", use_container_width=True): sim.set_robot_offline(fault_robot, False)
+    if f2.button("Restore", use_container_width=True, disabled=selected_fault_robot.captured): sim.set_robot_offline(fault_robot, False)
     if f3.button("Critical battery", use_container_width=True): sim.force_critical_battery(fault_robot)
     if f4.button("Toggle leak", use_container_width=True): sim.set_leak(fault_robot, not sim.robots[fault_robot].leak)
     iso1, iso2 = st.columns(2)

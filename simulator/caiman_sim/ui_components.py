@@ -21,6 +21,7 @@ STATE_COLORS = {
     RobotState.RETURNING_HOME.value: "#ff9f43",
     RobotState.SURFACING.value: "#8ee3ff",
     RobotState.HOLDING.value: "#a78bfa",
+    RobotState.CAPTURED.value: "#ff3b5c",
 }
 
 
@@ -32,8 +33,9 @@ def _ocean_texture() -> Image.Image:
 def mission_map(simulation: Any, show_trajectories: bool = True, show_links: bool = True, show_ids: bool = True) -> go.Figure:
     fig = go.Figure()
     rows = simulation.robot_rows()
-    live_rows = [row for row in rows if row["position_status"] != "LAST KNOWN"]
-    stale_rows = [row for row in rows if row["position_status"] == "LAST KNOWN"]
+    captured_rows = [row for row in rows if row.get("captured")]
+    live_rows = [row for row in rows if row["position_status"] != "LAST KNOWN" and not row.get("captured")]
+    stale_rows = [row for row in rows if row["position_status"] == "LAST KNOWN" and not row.get("captured")]
     fig.add_layout_image(
         dict(
             source=_ocean_texture(), xref="x", yref="y", x=0, y=simulation.config.height,
@@ -149,6 +151,20 @@ def mission_map(simulation: Any, show_trajectories: bool = True, show_links: boo
                     name="Last received fix (historical)",
                 )
             )
+        if captured_rows:
+            fig.add_trace(
+                go.Scatter(
+                    x=[row["x"] for row in captured_rows],
+                    y=[row["y"] for row in captured_rows],
+                    mode="markers+text" if show_ids else "markers",
+                    text=[f"{row['robot_id']} CAPTURED" for row in captured_rows],
+                    textposition="top center",
+                    marker={"size": 18, "symbol": "x", "color": "#ff3b5c", "line": {"width": 2}},
+                    customdata=[[row["robot_id"], row["depth"], row["position_age_s"], row["revoked"]] for row in captured_rows],
+                    hovertemplate="<b>%{customdata[0]} physically captured</b><br>Last RF fix depth %{customdata[1]:.1f} m<br>Fix age %{customdata[2]:.0f}s<br>Revoked: %{customdata[3]}<br>No live tracking<extra></extra>",
+                    name="Captured AUV — last known fix",
+                )
+            )
     vessel_label = "SURVEY VESSEL" if simulation.deployed else f"SURVEY VESSEL · {len(simulation.robots)} AUVs ON DECK"
     fig.add_trace(go.Scatter(x=[simulation.base.position.x], y=[simulation.base.position.y], mode="markers+text", text=[vessel_label] if show_ids else None, textposition="top center", marker={"symbol": "triangle-up", "size": 24, "color": "#24f0a5", "line": {"color": "white", "width": 1}}, name="Survey vessel"))
     fig.update_layout(
@@ -171,9 +187,12 @@ def topology_figure(simulation: Any) -> go.Figure:
         role = getattr(node, "role", "BASE")
         position = node.position if node_id == "BASE" else simulation.pc_position(node_id)
         stale = node_id != "BASE" and rows[node_id]["position_status"] != "LIVE RF"
+        captured = node_id != "BASE" and rows[node_id].get("captured", False)
         mule = node_id != "BASE" and rows[node_id]["is_data_mule"]
-        symbol = "triangle-up" if node_id == "BASE" else ("square-open" if mule else "circle-open") if stale else "square" if mule else "circle"
-        fig.add_trace(go.Scatter(x=[position.x], y=[position.y], mode="markers+text", text=[node_id + (" ?" if stale else "")], textposition="top center", marker={"size": 20 if node_id == "BASE" else 13, "symbol": symbol, "color": "#24f0a5" if node_id == "BASE" else "#f2cc60" if mule else "#30d5f2"}, name=node_id))
+        symbol = "triangle-up" if node_id == "BASE" else "x" if captured else ("square-open" if mule else "circle-open") if stale else "square" if mule else "circle"
+        label = node_id + (" CAPTURED" if captured else " ?" if stale else "")
+        color = "#24f0a5" if node_id == "BASE" else "#ff3b5c" if captured else "#f2cc60" if mule else "#30d5f2"
+        fig.add_trace(go.Scatter(x=[position.x], y=[position.y], mode="markers+text", text=[label], textposition="top center", marker={"size": 20 if node_id == "BASE" else 13, "symbol": symbol, "color": color}, name=node_id))
     fig.update_layout(height=520, paper_bgcolor="#071826", plot_bgcolor="#082235", margin={"l": 20, "r": 20, "t": 20, "b": 20}, showlegend=False, xaxis={"visible": False}, yaxis={"visible": False})
     return fig
 

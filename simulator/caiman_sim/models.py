@@ -17,6 +17,7 @@ class RobotState(str, Enum):
     SURFACING = "SURFACING"
     EMERGENCY = "EMERGENCY"
     OFFLINE = "OFFLINE"
+    CAPTURED = "CAPTURED"
 
 
 class MessageType(str, Enum):
