@@ -34,6 +34,56 @@ class BathymetryMap:
             (430.0, 585.0),
             (175.0, 520.0),
         ]
+        # Generate a distinct but reproducible seabed for each mission seed.
+        # Previously, the seed changed only a low-amplitude ripple while the
+        # main trench stayed fixed, so every mission had nearly the same map.
+        terrain_rng = np.random.default_rng(np.random.SeedSequence([seed, 0xCA1A]))
+
+        def random_point_inside() -> tuple[float, float]:
+            for _ in range(100):
+                candidate_x = float(terrain_rng.uniform(175.0, 930.0))
+                candidate_y = float(terrain_rng.uniform(125.0, 585.0))
+                if self.contains(candidate_x, candidate_y):
+                    return candidate_x, candidate_y
+            return self.width / 2.0, self.height / 2.0
+
+        primary_x, primary_y = random_point_inside()
+        secondary_x, secondary_y = random_point_inside()
+        for _ in range(20):
+            if math.hypot(secondary_x - primary_x, secondary_y - primary_y) >= 220.0:
+                break
+            secondary_x, secondary_y = random_point_inside()
+        shoal_x, shoal_y = random_point_inside()
+        self._slope_angle = float(terrain_rng.uniform(-0.65, 0.65))
+        self._phase_x = float(terrain_rng.uniform(0.0, math.tau))
+        self._phase_y = float(terrain_rng.uniform(0.0, math.tau))
+        self._basins = (
+            (
+                primary_x,
+                primary_y,
+                float(terrain_rng.uniform(90.0, 175.0)),
+                float(terrain_rng.uniform(70.0, 140.0)),
+                float(terrain_rng.uniform(3.2, 4.2)),
+            ),
+            (
+                secondary_x,
+                secondary_y,
+                float(terrain_rng.uniform(120.0, 230.0)),
+                float(terrain_rng.uniform(90.0, 170.0)),
+                float(terrain_rng.uniform(1.3, 2.2)),
+            ),
+        )
+        self._shoal = (
+            shoal_x,
+            shoal_y,
+            float(terrain_rng.uniform(90.0, 180.0)),
+            float(terrain_rng.uniform(70.0, 145.0)),
+            float(terrain_rng.uniform(0.9, 1.7)),
+        )
+        self._channel_slope = float(terrain_rng.uniform(-0.35, 0.45))
+        self._channel_offset = float(terrain_rng.uniform(180.0, 470.0))
+        self._channel_width = float(terrain_rng.uniform(45.0, 90.0))
+        self._channel_strength = float(terrain_rng.uniform(0.35, 0.85))
         self.x_values = np.linspace(0.0, width, grid_x)
         self.y_values = np.linspace(0.0, height, grid_y)
         # Reused by every sonar observation and sync. Building these arrays for
@@ -72,17 +122,22 @@ class BathymetryMap:
 
     def depth_at(self, x: float, y: float) -> float:
         """Synthetic but geographically plausible shallow coastal bathymetry."""
-        phase = (self.seed % 997) / 997.0 * math.tau
-        offshore_slope = 5.0 + 15.0 * (x / self.width)
-        trench = 11.5 * math.exp(-(((x - 705.0) / 145.0) ** 2 + ((y - 420.0) / 105.0) ** 2))
-        channel_axis = 0.34 * x + 72.0
-        channel = 3.2 * math.exp(-((y - channel_axis) / 58.0) ** 2)
-        shoal = 5.5 * math.exp(-(((x - 390.0) / 115.0) ** 2 + ((y - 260.0) / 90.0) ** 2))
-        relief = 0.65 * math.sin(x / 82.0 + phase) * math.cos(y / 67.0 - phase / 2)
-        raw = float(np.clip(offshore_slope + trench + channel - shoal + relief, 3.0, 30.0))
-        # The selected mission keeps vehicles in their 10-20 m operating band:
-        # a 13-20 m seabed gives roughly 10-17 m vehicle depth at 3 m altitude.
-        return 13.0 + (raw - 3.0) * 7.0 / 27.0
+        normalized_x = x / self.width - 0.5
+        normalized_y = y / self.height - 0.5
+        slope_axis = normalized_x * math.cos(self._slope_angle) + normalized_y * math.sin(self._slope_angle)
+        terrain = -1.15 + 1.15 * slope_axis
+        for center_x, center_y, scale_x, scale_y, strength in self._basins:
+            terrain += strength * math.exp(-(((x - center_x) / scale_x) ** 2 + ((y - center_y) / scale_y) ** 2))
+        shoal_x, shoal_y, shoal_scale_x, shoal_scale_y, shoal_strength = self._shoal
+        terrain -= shoal_strength * math.exp(
+            -(((x - shoal_x) / shoal_scale_x) ** 2 + ((y - shoal_y) / shoal_scale_y) ** 2)
+        )
+        channel_axis = self._channel_slope * (x - self.width / 2.0) + self._channel_offset
+        terrain += self._channel_strength * math.exp(-((y - channel_axis) / self._channel_width) ** 2)
+        terrain += 0.22 * math.sin(x / 74.0 + self._phase_x) * math.cos(y / 61.0 + self._phase_y)
+        # A logistic mapping avoids artificial flat clipping while keeping the
+        # seabed strictly inside 13-20 m (vehicle target depth remains 10-17 m).
+        return 13.0 + 7.0 / (1.0 + math.exp(-terrain))
 
     def vehicle_depth_at(self, x: float, y: float) -> float:
         return max(10.0, min(20.0, self.depth_at(x, y) - 3.0))

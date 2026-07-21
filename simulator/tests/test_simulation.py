@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import numpy as np
+
 from caiman_sim.config import CommunicationProfile, SimulationConfig
+from caiman_sim.bathymetry import BathymetryMap
 from caiman_sim.models import CommandStatus, CommandType, Position
 from caiman_sim.robot import Robot
 from caiman_sim.simulation import Simulation
@@ -138,6 +141,14 @@ def test_bathymetry_is_bounded_and_coverage_grows(lossless_config):
     sim.step_many(100)
     assert sim.bathymetry.coverage > initial
     assert all(robot.position.depth <= 20.0 for robot in sim.robots.values())
+
+
+def test_bathymetry_seed_changes_terrain_and_deepest_location():
+    maps = [BathymetryMap(1100.0, 700.0, seed) for seed in (1, 2, 3, 42)]
+    deepest_locations = {(round(item.true_deepest.x), round(item.true_deepest.y)) for item in maps}
+    assert len(deepest_locations) == len(maps)
+    assert all(13.0 < item.true_deepest.depth < 20.0 for item in maps)
+    assert all(not np.allclose(maps[0].depth_grid, item.depth_grid) for item in maps[1:])
 
 
 def test_export_contains_mapped_bathymetry(lossless_config, tmp_path):
