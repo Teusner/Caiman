@@ -36,6 +36,9 @@ class BathymetryMap:
         ]
         self.x_values = np.linspace(0.0, width, grid_x)
         self.y_values = np.linspace(0.0, height, grid_y)
+        # Reused by every sonar observation and sync. Building these arrays for
+        # every robot tick dominated the hot path during accelerated playback.
+        self.grid_xx, self.grid_yy = np.meshgrid(self.x_values, self.y_values)
         self.depth_grid = np.array([[self.depth_at(float(x), float(y)) for x in self.x_values] for y in self.y_values])
         self.inside_mask = np.array([[self.contains(float(x), float(y)) for x in self.x_values] for y in self.y_values])
         self.observed_mask = np.zeros_like(self.inside_mask, dtype=bool)
@@ -87,7 +90,7 @@ class BathymetryMap:
     def observe(self, x: float, y: float, radius: float, rng: np.random.Generator) -> BathymetrySample | None:
         if not self.contains(x, y):
             return None
-        measurement = float(np.clip(self.depth_at(x, y) + rng.normal(0.0, 0.06), 10.0, 20.0))
+        measurement = float(min(20.0, max(10.0, self.depth_at(x, y) + rng.normal(0.0, 0.06))))
         self.sample_count += 1
         sample = BathymetrySample(x, y, measurement)
         self.samples.append(sample)
@@ -99,8 +102,9 @@ class BathymetryMap:
         self.measured_grid[y_index, x_index] = measurement
         # Reconnaissance coverage means a cell has a nearby measured track;
         # it is not the much smaller physical single-beam footprint.
-        xx, yy = np.meshgrid(self.x_values, self.y_values)
-        supported = ((xx - x) ** 2 + (yy - y) ** 2 <= max(26.0, radius) ** 2) & self.inside_mask
+        supported = (
+            (self.grid_xx - x) ** 2 + (self.grid_yy - y) ** 2 <= max(26.0, radius) ** 2
+        ) & self.inside_mask
         self.observed_mask |= supported
         return sample
 
@@ -118,9 +122,10 @@ class BathymetryMap:
         """Commit the data physically carried to a surface RF contact."""
         self.base_samples = list(self.samples[:sample_limit])
         self.base_observed_mask[:] = False
-        xx, yy = np.meshgrid(self.x_values, self.y_values)
         for sample in self.base_samples:
-            self.base_observed_mask |= (((xx - sample.x) ** 2 + (yy - sample.y) ** 2) <= 26.0**2) & self.inside_mask
+            self.base_observed_mask |= (
+                ((self.grid_xx - sample.x) ** 2 + (self.grid_yy - sample.y) ** 2) <= 26.0**2
+            ) & self.inside_mask
         self.base_measured_grid[:] = np.nan
         if self.base_samples:
             sample_x = np.array([sample.x for sample in self.base_samples])

@@ -16,6 +16,10 @@ from caiman_sim.simulation import Simulation
 from caiman_sim.ui_components import mission_map, telemetry_history_figure, topology_figure
 
 
+AUTOMATIC_STEP_BATCH = 10
+FAST_STEP_BATCH = 50
+
+
 st.set_page_config(page_title="Caiman Mission Control", page_icon="🌊", layout="wide", initial_sidebar_state="expanded")
 st.markdown(
     """<style>
@@ -47,6 +51,8 @@ def make_config() -> SimulationConfig:
 def reset_simulation() -> None:
     st.session_state.simulation = Simulation(make_config())
 
+
+manual_step_applied = False
 
 with st.sidebar:
     st.markdown("## Mission setup")
@@ -128,15 +134,19 @@ with st.sidebar:
         sim.pause()
     if controls[0].button("Step ×1", use_container_width=True, disabled=not sim.deployed or terminal):
         sim.step(force=True)
-    if controls[1].button("Step ×10", use_container_width=True, disabled=not sim.deployed or terminal):
-        sim.step_many(10)
+        manual_step_applied = True
+    if controls[1].button(f"Step ×{FAST_STEP_BATCH}", use_container_width=True, disabled=not sim.deployed or terminal):
+        sim.step_many(FAST_STEP_BATCH)
+        manual_step_applied = True
+    st.caption(f"Automatic mode advances {AUTOMATIC_STEP_BATCH} simulation ticks per dashboard refresh.")
     if st.button("Export logs", use_container_width=True):
         paths = sim.export(str(Path(__file__).parent / "exports"))
         st.success(f"Exported {len(paths)} files")
 
 sim = st.session_state.simulation
+if sim.running and not manual_step_applied:
+    sim.step_many(AUTOMATIC_STEP_BATCH, force=False)
 if sim.running:
-    sim.step()
     st_autorefresh(interval=max(250, int(1000 / sim.config.simulation_speed)), key="mission_refresh")
 
 st.markdown('<div class="caiman-sub">Encrypted underwater swarm operations</div>', unsafe_allow_html=True)
@@ -160,11 +170,16 @@ for row in (metric_defs[:6], metric_defs[6:]):
     for column, (label, value) in zip(columns, row):
         column.metric(label, value)
 
-mission_tab, robots_tab, network_tab, commands_tab, security_tab, packets_tab, events_tab = st.tabs(
-    ["Mission", "Robots", "Network", "Commands", "Security", "Packet Log", "Events"]
+active_tab = st.radio(
+    "Dashboard view",
+    ["Mission", "Robots", "Network", "Commands", "Security", "Packet Log", "Events"],
+    index=0,
+    horizontal=True,
+    key="dashboard_view",
+    label_visibility="collapsed",
 )
 
-with mission_tab:
+if active_tab == "Mission":
     if not sim.deployed:
         st.info("All AUVs are secured on the survey vessel. Deploy the fleet to begin the coordinated bathymetric search.")
     elif summary["connected_robots"] < len(sim.robots) and sim.mission_phase in {"DEPLOYING", "SURVEYING"}:
@@ -194,7 +209,7 @@ with mission_tab:
     right.markdown("#### Recent mission events")
     right.dataframe(pd.DataFrame(sim.events.records[-10:][::-1]), use_container_width=True, hide_index=True)
 
-with robots_tab:
+if active_tab == "Robots":
     st.caption("This tab contains only telemetry received by the vessel PC. It does not expose onboard/ground-truth positions while RF is unavailable.")
     st.dataframe(pd.DataFrame(pc_rows), use_container_width=True, hide_index=True)
     selected_robot = st.selectbox("Inspect robot", list(sim.robots), key="inspect_robot")
@@ -214,7 +229,7 @@ with robots_tab:
     if received_history:
         st.json(received_history[-1], expanded=False)
 
-with network_tab:
+if active_tab == "Network":
     if sim.config.communication_profile == CommunicationProfile.NRF24_SURFACE:
         st.caption("Physical RF constraint active: nodes deeper than 0.5 m have no link. The topology therefore appears only during surface contacts.")
     st.plotly_chart(topology_figure(sim), use_container_width=True, config={"displayModeBar": False})
@@ -240,7 +255,7 @@ with network_tab:
         st.json(decode_frame_header(physical), expanded=False)
     st.warning("Firmware status: the current nRF24/STM32 driver accepts fixed 32-byte payloads, but its fragment/reassembly, compact codec, nonce persistence, ChaCha20-Poly1305 and HMAC layers still need implementation before this format is hardware-compatible end to end.")
 
-with commands_tab:
+if active_tab == "Commands":
     left, right = st.columns(2)
     target = left.selectbox("Target robot", list(sim.robots), key="command_target")
     command_type = right.selectbox("Command", [item.value for item in CommandType if item != CommandType.ROTATE_KEY], key="command_type")
@@ -255,7 +270,7 @@ with commands_tab:
     command_rows = [command.to_dict() for command in sim.base.commands.values()]
     st.dataframe(pd.DataFrame(command_rows), use_container_width=True, hide_index=True)
 
-with security_tab:
+if active_tab == "Security":
     a, b, c, d = st.columns(4)
     a.metric("Mission ID", sim.mission_id)
     b.metric("Key ID", summary["key_id"])
@@ -320,7 +335,7 @@ with security_tab:
         if st.button("Interrupt selected link"):
             sim.interrupt_link(*selected_link.split("|"))
 
-with packets_tab:
+if active_tab == "Packet Log":
     packet_frame = pd.DataFrame(sim.network.packet_log)
     if not packet_frame.empty:
         f1, f2, f3 = st.columns(3)
@@ -332,6 +347,6 @@ with packets_tab:
         if status_filter: packet_frame = packet_frame[packet_frame["status"].isin(status_filter)]
     st.dataframe(packet_frame.iloc[::-1] if not packet_frame.empty else packet_frame, use_container_width=True, hide_index=True, height=560)
 
-with events_tab:
+if active_tab == "Events":
     event_frame = pd.DataFrame(sim.events.records)
     st.dataframe(event_frame.iloc[::-1] if not event_frame.empty else event_frame, use_container_width=True, hide_index=True, height=620)
