@@ -1,0 +1,5 @@
+build/
+esp32/build/
+.state/
+sdkconfig
+sdkconfig.old
