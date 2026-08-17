@@ -1,0 +1,105 @@
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english,french]{babel}
+\usepackage{tgschola}
+\usepackage[varg]{newtxmath}
+\usepackage{microtype}
+
+\usepackage[
+  a4paper,
+  left=25mm,
+  right=20mm,
+  top=20mm,
+  bottom=20mm,
+  headheight=16pt,
+  headsep=7mm,
+  footskip=10mm
+]{geometry}
+\usepackage{setspace}
+\singlespacing
+\setlength{\parindent}{1.5cm}
+\setlength{\parskip}{0pt}
+\setlength{\emergencystretch}{2em}
+
+\usepackage{graphicx}
+\graphicspath{{figures/}{../docs/}}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{threeparttable}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+\usepackage[dvipsnames,table]{xcolor}
+\definecolor{enstablue}{HTML}{143D59}
+\definecolor{caimanblue}{HTML}{176B87}
+\definecolor{caimangreen}{HTML}{3A7D44}
+\definecolor{todoorange}{HTML}{B45309}
+
+\usepackage{enumitem}
+\setlist{nosep,leftmargin=*}
+\usepackage{siunitx}
+% Le préfixe micro doit rester droit : l'italique est réservé aux grandeurs.
+\usepackage{upgreek}
+\sisetup{locale=FR,per-mode=symbol,detect-all}
+% Le préfixe micro doit rester droit (l'italique est réservé aux grandeurs) et
+% ne pas introduire d'espace inter-unité : il est déclaré comme préfixe, non
+% comme unité.
+\DeclareSIPrefix{\micro}{\ensuremath{\upmu}}{-6}
+\usepackage{amsmath}
+\usepackage{csquotes}
+
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  frame=single,
+  breaklines=true,
+  columns=fullflexible,
+  showstringspaces=false,
+  keywordstyle=\color{caimanblue}\bfseries,
+  commentstyle=\color{caimangreen}
+}
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit}
+\usepackage{pgfgantt}
+
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\color{enstablue}}
+  {\fontsize{18}{20}\selectfont\chaptername\ \thechapter}
+  {0.5ex}
+  {\fontsize{22}{25}\selectfont}
+\titleformat{\section}
+  {\normalfont\fontsize{14}{17}\selectfont\bfseries\color{enstablue}}
+  {\thesection}{0.7em}{}
+\titleformat{\subsection}
+  {\normalfont\fontsize{12}{15}\selectfont\bfseries\itshape}
+  {\thesubsection}{0.7em}{}
+
+\usepackage{fancyhdr}
+\usepackage{emptypage}
+
+\usepackage[
+  backend=bibtex,
+  style=numeric-comp,
+  sorting=nyt,
+  maxbibnames=8
+]{biblatex}
+
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=enstablue,
+  citecolor=caimangreen,
+  urlcolor=caimanblue,
+  pdftitle={Rapport de PRe - Caiman},
+  pdfauthor={Joab da Silva Bezerra},
+  pdfsubject={Électronique embarquée et robotique sous-marine}
+}
+\usepackage[nameinlink,noabbrev]{cleveref}

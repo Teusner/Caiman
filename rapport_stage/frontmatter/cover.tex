@@ -1,0 +1,60 @@
+\newgeometry{margin=20mm}
+\begin{titlepage}
+  \thispagestyle{empty}
+
+  \noindent\begin{minipage}[t]{0.48\textwidth}
+    \raggedright
+    \LogoOrPlaceholder[72mm]{figures/logos/ensta_ip_paris_horizontal_bleu.png}{Logo ENSTA}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[t]{0.48\textwidth}
+    \raggedleft
+    \begingroup
+      \setlength{\fboxsep}{2.5mm}%
+      \colorbox{enstablue}{\includegraphics[width=43mm]{figures/logos/labsticc_logo_officiel.png}}%
+    \endgroup
+  \end{minipage}
+
+  \vspace{9mm}
+
+  \begin{center}
+    {\Large\bfseries Projet de Recherche (PRe)\par}
+    \vspace{4mm}
+    {\large \ProgramName\par}
+    {\large Année universitaire \AcademicYear\par}
+
+    \vspace{11mm}
+    {\color{enstablue}\rule{0.9\textwidth}{1.2pt}\par}
+    \vspace{7mm}
+    {\fontsize{22}{27}\selectfont\bfseries\ReportTitle\par}
+    \vspace{5mm}
+    {\Large\itshape\ReportSubtitle\par}
+    \vspace{7mm}
+    {\color{enstablue}\rule{0.9\textwidth}{1.2pt}\par}
+
+    \vspace{6mm}
+    \includegraphics[width=0.50\textwidth,height=42mm,keepaspectratio]%
+      {fabrication/cad_caiman_full_assembly.png}
+
+    \vfill
+
+    \begin{tabularx}{0.92\textwidth}{@{}>{\bfseries}l X@{}}
+      Auteur : & \StudentName \\
+      Organisme d'accueil : & \HostName, \HostTeam \\
+      Tuteur principal : & \SupervisorOne{} -- \SupervisorOneRole \\
+      Accompagnement technique : & \SupervisorTwo{} -- \SupervisorTwoRole \\
+      Référent pédagogique : & \AcademicTutor{} -- \AcademicTutorRole \\
+      Période : & du \StageStart{} au \StageEnd \\
+      Soutenance : & \DefenseDate \\
+    \end{tabularx}
+
+    \vfill
+
+    {\HostAddress\par}
+    \vspace{4mm}
+    {\bfseries\Confidentiality\par}
+    \vspace{2mm}
+    {\Large\bfseries\color{red}NON CONFIDENTIEL\par}
+  \end{center}
+\end{titlepage}
+\restoregeometry

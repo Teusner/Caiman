@@ -1,0 +1,38 @@
+R2 NRF profile rate=250kbps FIFO=3 Auto-ACK=on ARC=3 ARD=500us
+R2 node=2 listening on UDP 4210; peer R1=192.168.4.1 node=1
+
+--- Cycle 1/5 ---
+R2 RX PEER_STATE seq=102762 R1->R2 | x=123.9m y=456.9m depth=12.10m
+   bottom=18.55m battery=79.5% link=0% leak=no GNSS=no
+R2 FRAME 32B encrypted=41010201916a00083a07039bff1df48a...
+R2 TX PEER_STATE seq=32769 R2->R1 x=800.0 y=200.0 depth=10.00
+   battery=95.0 link=100%
+R2 TX PEER_STATE seq=32769 -> TX_DS
+
+--- Cycle 2/5 ---
+R2 RX PEER_STATE seq=102763 R1->R2 | x=124.4m y=457.1m depth=12.20m
+   bottom=18.60m battery=79.0% link=53% leak=no GNSS=no
+R2 TX PEER_STATE seq=32770 R2->R1 x=799.7 y=200.4 depth=10.08
+   battery=94.5 link=75%
+R2 TX PEER_STATE seq=32770 -> TX_DS
+
+--- Cycle 3/5 ---
+R2 RX PEER_STATE seq=102764 R1->R2 | x=124.9m y=457.3m depth=12.30m
+   bottom=18.65m battery=78.5% link=100% leak=no GNSS=no
+R2 TX PEER_STATE seq=32771 R2->R1 x=799.4 y=200.8 depth=10.16
+   battery=94.0 link=75%
+R2 TX PEER_STATE seq=32771 -> TX_DS
+
+--- Cycle 4/5 ---
+R2 RX PEER_STATE seq=102765 R1->R2 | x=125.4m y=457.5m depth=12.40m
+   bottom=18.70m battery=78.0% link=100% leak=no GNSS=no
+R2 TX PEER_STATE seq=32772 R2->R1 x=799.1 y=201.2 depth=10.24
+   battery=93.5 link=75%
+R2 TX PEER_STATE seq=32772 -> TX_DS
+
+--- Cycle 5/5 ---
+R2 RX PEER_STATE seq=102766 R1->R2 | x=125.9m y=457.7m depth=12.50m
+   bottom=18.50m battery=77.5% link=100% leak=no GNSS=no
+R2 TX PEER_STATE seq=32773 R2->R1 x=798.8 y=201.6 depth=10.32
+   battery=93.0 link=75%
+R2 TX PEER_STATE seq=32773 -> TX_DS

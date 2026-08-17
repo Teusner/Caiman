@@ -1,0 +1,79 @@
+\chapter{Système Caiman et cahier des charges}
+\label{chap:systeme}
+
+La plateforme Caiman articule une carte électronique embarquée, un firmware STM32, des capteurs, un moyen de stockage et une liaison radio. Le simulateur étend cette architecture à une flotte de cinq robots et permet d'étudier les conséquences de la portée, de l'immersion, des pertes de paquets et de la consommation énergétique selon les principes fondamentaux de la navigation sous-marine autonome et du contrôle de flotte \cite{fossen2011handbook, paull2013auv}.
+
+\section{Architecture fonctionnelle}
+
+Les fonctions principales identifiées dans le schéma sont :
+
+\begin{itemize}
+  \item conversion et protection de l'alimentation ;
+  \item calcul temps réel autour d'un STM32F765VITx ;
+  \item mesure inertielle, magnétique et barométrique ;
+  \item stockage sur carte microSD ;
+  \item communication nRF24 sur SPI ;
+  \item interfaces pour GNSS, sonar, propulseurs et extensions I\textsuperscript{2}C/UART ;
+  \item signalisation par LED RGB.
+\end{itemize}
+
+\section{Conception mécanique et modélisation 3D CAO (Onshape)}
+
+La structure physique du Caiman a été modélisée sous la plateforme CAO Onshape (projet \texttt{Caiman - Copysdfs}). La conception mécanique s'articule autour d'un corps cylindrique étanche en polyméthacrylate de méthyle (PMMA), destiné à résister à la pression hydrostatique tout en laissant les instruments internes visibles. La \cref{fig:caiman-cad-mechanics} en donne l'assemblage général.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=52mm,keepaspectratio]{fabrication/cad_caiman_full_assembly.png}
+    \caption{Vue d'ensemble 3D de l'assemblage complet du robot Caiman sous Onshape.}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=52mm,keepaspectratio]{fabrication/cad_caiman_battery_pack.png}
+    \caption{Structure du berceau interne et intégration du pack de batteries Li-ion 18650.}
+  \end{subfigure}
+  \caption{Modélisation CAO sous Onshape de la structure mécanique générale du Caiman.}
+  \label{fig:caiman-cad-mechanics}
+\end{figure}
+
+La modélisation 3D illustre l'intégration compacte des sous-ensembles au sein du tube cylindrique étanche en polyméthacrylate de méthyle (PMMA). Ce matériau transparent a été retenu pour concilier une excellente résistance mécanique aux contraintes hydrostatiques et une visibilité directe sur la carte électronique Caiman et l'état des liaisons internes. Le berceau longitudinal maintient l'alignement des accumulateurs Li-ion 18650 ; la géométrie vise à centrer la masse afin de limiter les variations d'assiette en immersion, sans qu'un essai hydrostatique ait pu le vérifier.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=48mm,keepaspectratio]{fabrication/cad_front_lid_clean.png}
+    \caption{Flasque avant (\emph{Front Lid}) avec orifice du capteur Bar30 et hublot optique.}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=48mm,keepaspectratio]{fabrication/cad_back_lid_clean.png}
+    \caption{Flasque arrière (\emph{Back Lid}) équipée des pénétrateurs pour propulseurs T60.}
+  \end{subfigure}
+  \caption{Conception détaillée des flasques d'étanchéité avant et arrière du corps étanche.}
+  \label{fig:caiman-lids-mechanics}
+\end{figure}
+
+Comme le montre la \cref{fig:caiman-lids-mechanics}, l'étanchéité radiale du tube repose sur deux flasques usinées en alu/polycarbonate intégrant une double gorge pour joint torique (O-ring). La flasque avant (\emph{Front Lid}) intègre le port du capteur de pression piézorésistif Bar30 ainsi que la réservation pour le dôme optique. La flasque arrière (\emph{Back Lid}) réunit les traversées étanches (\emph{bulkheads} hybrides M10) alimentant les deux propulseurs subaquatiques T60 ainsi que le câble de la balise radio de surface. La disposition axiale des pénétrateurs vise à limiter les pincements de câbles lors de la fermeture de l'enceinte.
+
+\section{Contraintes de validation}
+
+La réception tardive du PCB impose une stratégie par niveaux : vérification ERC/DRC des sources CAO, tests unitaires du logiciel de simulation, lecture et intégration statique du firmware, puis démonstration HIL du protocole sur des cartes de développement. Les essais d'alimentation, de programmation et de capteurs sur la carte Caiman restent hors du périmètre temporel du stage.
+
+\section{Hypothèses de simulation et ordre de grandeur énergétique}
+
+Le scénario par défaut du simulateur emploie cinq AUV, une batterie nominale de \SI{12}{\volt}/\SI{56}{\ampere\hour}, un courant moyen moteur de \SI{15}{\ampere} et une portée radio de surface de \SI{250}{\metre}. Ces valeurs sont des hypothèses de modélisation fournies au projet ; elles ne constituent ni des mesures sur le Caiman final ni des exigences qualifiées.
+
+Elles permettent néanmoins un calcul d'ordre de grandeur facile à interpréter. L'énergie nominale et l'autonomie idéale limitée aux moteurs s'écrivent
+\begin{align}
+  E_{\mathrm{nom}} &= UQ
+  = \SI{12}{\volt}\times\SI{56}{\ampere\hour}
+  = \SI{672}{\watt\hour}, \\
+  t_{\mathrm{idéal}} &= \frac{Q}{I_{\mathrm{moteurs}}}
+  = \frac{\SI{56}{\ampere\hour}}{\SI{15}{\ampere}}
+  \approx \SI{3.73}{\hour}.
+\end{align}
+Ce quotient sert uniquement de référence au modèle énergétique. Les pertes des convertisseurs, l'électronique, les pointes de man\oe{}uvre, l'environnement et la réserve de sécurité réduiraient l'autonomie réelle ; aucune durée de mission physique n'est donc revendiquée.

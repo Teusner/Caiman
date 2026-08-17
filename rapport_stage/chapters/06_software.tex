@@ -1,0 +1,64 @@
+\chapter{Logiciel embarqué}
+\label{chap:software}
+
+La carte étant partie en fabrication, le travail logiciel a pu progresser en parallèle, sans toutefois pouvoir être éprouvé sur la cible. Le firmware repose sur STM32Cube et FreeRTOS. La tâche principale appelle l'initialisation de la couche applicative capteurs, puis exécute périodiquement sa fonction de service. La période visée est d'environ \SI{100}{\milli\second}, soit \SI{10}{\hertz}. Le \cref{tab:drivers} situe le niveau de maturité atteint par chaque fonction.
+
+\section{Niveaux de maturité}
+
+\begin{table}[H]
+  \centering
+  \caption{État des principales fonctions logicielles à la fin du stage.}
+  \label{tab:drivers}
+  \begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth} c c c >{\raggedright\arraybackslash}X@{}}
+    \toprule
+    \textbf{Fonction} & \textbf{Code} & \textbf{Intégrée} & \textbf{Test PCB} & \textbf{Observation} \\
+    \midrule
+    LSM6DSO, LIS2MDL, LPS22HB & oui & oui & non & Lecture prévue dans la tâche capteurs. \\
+    Batterie ADC, RGB, microSD & oui & oui & non & Logger intégré ; format CSV à harmoniser. \\
+    nRF24, ESC, Bar30 & oui & non & non & Pilotes présents, hors chemin applicatif principal audité. \\
+    GNSS, Ping2, RC, fuite, contact magnétique & partiel & non & non & Squelettes ou stubs. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Aucun de ces pilotes n'a été validé sur le PCB Caiman, la carte n'ayant pas été reçue. Le résultat du stage est donc une base logicielle destinée au premier bring-up, et non un firmware de production qualifié.
+
+Une incohérence a été identifiée dans la journalisation : l'en-tête CSV annonce dix colonnes tandis que l'application écrit dix-huit champs. Ce point devra être corrigé avant l'exploitation des mesures.
+
+\section{Essai exploratoire STM32 et centrale inertielle}
+
+En parallèle du firmware cible, un premier banc a été réalisé avec une carte NUCLEO-H743ZI2 et un module SparkFun Qwiic 9DoF fondé sur l'ICM-20948. Ce banc, reproduit en \cref{fig:stm32-imu-exploratory}, avait pour objectif de se familiariser avec une chaîne d'acquisition inertielle sur STM32 et d'identifier les besoins futurs de navigation du sous-marin : mesure des accélérations et vitesses angulaires, information de cap, calibration et fusion ultérieure avec la profondeur et les positions disponibles en surface.
+
+Les essais ont fourni une première observation qualitative du comportement d'une centrale inertielle au repos et lors de mouvements du module. Ils ont surtout servi à préparer la démarche d'intégration : alimentation et raccordement d'un capteur externe, initialisation, lecture périodique et interprétation des axes. Aucun journal brut, graphique temporel ni protocole métrologique n'étant conservé avec les photographies, aucune précision, fréquence ou dérive chiffrée n'est revendiquée.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[height=64mm]{stm32/nucleo_h743zi2_banc_2026-06-10.jpg}
+    \caption{Carte NUCLEO-H743ZI2 alimentée et raccordée par fils de prototypage.}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[height=64mm]{stm32/imu_icm20948_detail_2026-06-10.jpg}
+    \caption{Module neuf axes ICM-20948 utilisé pour les essais.}
+  \end{subfigure}
+  \caption{Banc exploratoire STM32/IMU réalisé avant la disponibilité de la carte Caiman.}
+  \label{fig:stm32-imu-exploratory}
+\end{figure}
+
+Ce prototype diffère du matériel final : la NUCLEO utilise un STM32H743, alors que Caiman est fondée sur un STM32F765VITx \cite{stmicro-stm32f765} et sépare la fonction inertielle entre LSM6DSO et LIS2MDL. Il démontre donc une prise en main et une intention d'architecture, pas la validation des pilotes ni des performances du PCB Caiman.
+
+\subsection{Repère théorique pour l'estimation d'attitude}
+
+L'exploitation future des mesures peut s'appuyer sur un filtre complémentaire ou un observateur d'attitude sur SO(3), modèles fondamentaux en automatique, estimation et navigation robotique \cite{mahony2008nonlinear, madgwick2011estimation}. Pour un angle de roulis ou de tangage, une écriture discrète est
+\begin{equation}
+  \widehat{\theta}_k =
+  \alpha\left(\widehat{\theta}_{k-1}+\omega_{g,k}\Delta t\right)
+  +(1-\alpha)\theta_{a,k},
+  \qquad 0<\alpha<1,
+  \label{eq:complementary-filter}
+\end{equation}
+où $\omega_{g,k}$ est la vitesse angulaire mesurée par le gyroscope, $\Delta t$ la période d'échantillonnage et $\theta_{a,k}$ l'inclinaison déduite de la direction de la gravité mesurée par l'accéléromètre. Le premier terme suit rapidement le mouvement mais accumule une dérive ; le second fournit une référence lente, plus sensible aux accélérations parasites. Leur pondération combine donc deux informations complémentaires \cite{narkhede-complementary-filter}.
+
+Cette équation formalise une perspective, pas un résultat du banc photographié : aucun coefficient $\alpha$, aucune calibration et aucune précision d'attitude n'ont été validés. L'estimation du cap demanderait en outre le magnétomètre et sa calibration dans l'environnement magnétique du véhicule.

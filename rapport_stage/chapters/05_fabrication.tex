@@ -1,0 +1,131 @@
+\chapter{Routage et préparation à la fabrication}
+\label{chap:fabrication}
+
+\section{Vérification DRC et règles de fabrication}
+\label{sec:drc}
+
+Le contrôle des règles de conception (DRC) a fait l'objet de vérifications explicites tout au long du routage. Les règles du projet ont été alignées sur la grille de tolérances publiée par JLCPCB \cite{jlcpcb-capabilities}, avec une clearance cuivre interne de \SI{0.15}{\milli\metre}, une largeur de piste minimale de \SI{0.127}{\milli\metre} et un diamètre de via minimal de \SI{0.30}{\milli\metre}. Ces valeurs sont volontairement plus strictes que les capacités minimales du procédé, afin de conserver une marge industrielle.
+
+Trois révisions successives ont été contrôlées : \GitCommit{654cd20} (8 juin 2026), \GitCommit{b900398} (9 juin 2026) et \GitCommit{b58eda6} (19 juin 2026). Sur cette dernière, le DRC ne signale plus qu'une seule violation résiduelle, reproductible avec la commande donnée en \cref{app:evidence}. Le \cref{tab:drc-final} récapitule cette violation et les écarts analysés puis documentés en exclusion.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Violations résiduelles analysées et documentées avant lancement en fabrication.}
+  \label{tab:drc-final}
+  \begin{tabularx}{\textwidth}{@{}l l X@{}}
+    \toprule
+    \textbf{Origine} & \textbf{Mesure} & \textbf{Analyse et décision} \\
+    \midrule
+    U5 --- \texttt{/I2C2\_SCL} / \texttt{GND} & \SI{0.1291}{\milli\metre} & Clearance interne au boîtier compact. Sous la règle de projet de \SI{0.15}{\milli\metre}, mais au-dessus du minimum piste/espacement publié de \SI{0.10}{\milli\metre} pour un cuivre \SI{1}{oz}. Exclusion documentée. \\
+    U6 --- pad \texttt{NC} & --- & Pastille non connectée à proximité du plan \texttt{+3V3} ; sans fonction électrique, écart accepté. \\
+    U8 --- pad \texttt{INT2} & \SI{0.1472}{\milli\metre} & Pastille non connectée ; écart de \SI{2.8}{\micro\metre} sous la règle interne, très au-dessus de la capacité du procédé. \\
+    U2 --- \texttt{BST} / \texttt{SW} & \SI{0.132}{\milli\metre} & Broches adjacentes du convertisseur, empreinte constructeur imposée. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Toutes ces occurrences relèvent de la même catégorie : des écarts entre une règle interne conservatrice et la géométrie imposée par des empreintes de composants compacts, chacun restant au-dessus des capacités publiées du fabricant. Aucune ne correspond à une impossibilité de fabrication. Elles ont été inscrites dans la liste d'exclusions du projet plutôt que masquées par un abaissement global des règles, afin que le motif de chaque acceptation reste consultable dans le fichier de projet.
+
+Le dossier de production a ensuite été soumis à la revue DFM du fabricant avant le lancement, étape qui a également conduit à la reprise des inductances de puissance décrite en \cref{sec:inductances}.
+
+Le PCB ayant été commandé mais non reçu à la date de rédaction, une inspection visuelle et un contrôle de continuité des rails d'alimentation seront réalisés à la réception, préalablement à toute mise sous tension.
+
+Un enseignement méthodologique se dégage de cette phase : le DRC gagne à être traité comme une condition de sortie de l'export de production, réexécuté sur l'état exact qui alimente les fichiers transmis, et non comme une étape franchie une fois pour toutes en cours de routage. La trace de cette exécution mérite d'être archivée avec la commande.
+
+\section{Dossier de production}
+
+Le dossier comprend les Gerbers des deux couches cuivre, les masques de soudure, les sérigraphies, le contour de carte et les perçages PTH/NPTH. La nomenclature sélectionnée (BOM) référence 116 composants placés.
+
+La commande JLCPCB du 23 juin 2026 porte sur cinq cartes FR-4 TG135 de \SI{100.87}{\milli\metre} par \SI{93.94}{\milli\metre}, deux couches, cuivre externe \SI{1}{oz}, finition ENIG, masque noir, sérigraphie blanche et vias tented. Le fabricant annonce un test électrique flying-probe et une conformité IPC classe 2 ; la \cref{fig:jlc-order-details} en reproduit le récapitulatif. L'épaisseur commandée est \SI{0.8}{\milli\metre}, alors que le stackup du fichier KiCad reste configuré à \SI{1.6}{\milli\metre}. Cette différence n'affecte pas la comparaison des clearances cuivre à \SI{1}{oz}, mais elle doit être prise en compte pour la rigidité mécanique, la fixation et les connecteurs.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth,height=0.35\textheight,keepaspectratio]{fabrication/jlcpcb_order_details_2026-06-23.png}
+  \caption{Détails de la commande PCB JLCPCB du 23 juin 2026.}
+  \label{fig:jlc-order-details}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{fabrication/pcb_routing_top_cropped.pdf}
+    \caption{Couche supérieure (F.Cu) : bus, alimentation et empreintes CMS.}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{fabrication/pcb_routing_bottom_cropped.pdf}
+    \caption{Couche inférieure (B.Cu) : plan de masse et découplage.}
+  \end{subfigure}
+  \caption{Plans de routage haute résolution de la carte Caiman (revue de fabrication).}
+  \label{fig:pcb-routing-composite}
+\end{figure}
+
+Les deux couches cuivre telles que transmises sont reproduites en \cref{fig:pcb-routing-composite}. La carte n'étant pas encore reçue à la date de rédaction du rapport, ni la qualité d'assemblage ni le fonctionnement électrique sur le PCB physique ne sont validés.
+
+\section{Sélection finale et remplacement des inductances de puissance (L1 et L2)}
+\label{sec:inductances}
+
+Lors de la préparation du fichier PCBA pour l'assemblage automatisé SMT chez JLCPCB, la revue d'ingénierie du fabricant a révélé une incompatibilité géométrique entre l'empreinte (\emph{land pattern}) dessinée sur la carte et la géométrie des plages de brasage des composants initialement présélectionnés dans la nomenclature. Le fabricant a suspendu l'assemblage et proposé quatre options : re-sélectionner un composant compatible, laisser les emplacements non peuplés, annuler la commande, ou braser en l'état sans garantie. La \cref{fig:jlc-inductances} reproduit cet échange et la superposition des empreintes qui l'accompagne.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{fabrication/jlcpcb_pcba_L1L2_message.png}
+    \caption{Signalement de la revue PCBA : surface de brasage insuffisante sur L1 et L2.}
+  \end{subfigure}
+
+  \vspace{4mm}
+
+  \begin{subfigure}[t]{0.52\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{fabrication/jlcpcb_pcba_L1L2_pads.png}
+    \caption{Superposition des plages de la carte (contour vert) et des terminaisons du composant proposé (zones rouges), montrant le débord latéral.}
+  \end{subfigure}
+  \caption{Détection d'une incompatibilité géométrique lors de la revue PCBA du 12 août 2026 et bascule vers des références correspondant au land pattern WE-MAPI 4020.}
+  \label{fig:jlc-inductances}
+\end{figure}
+
+L'option retenue a été la re-sélection des composants : elle seule préserve à la fois la fonction des deux convertisseurs et la fiabilité mécanique du joint brasé. Les références finalement commandées sont données au \cref{tab:inductors-selection}.
+
+Ce décalage met en évidence un enseignement fondamental en ingénierie électronique : des dimensions extérieures de boîtier identiques (ex. $4\times4\,\text{mm}$) ne garantissent en aucun cas une compatibilité de routage ou d'empreinte sous le composant. La sélection finale a été entièrement reprise en comparant les datasheets constructeurs, les valeurs d'inductance, le courant thermique nominal, le courant de saturation, la résistance DC (DCR) et la géométrie exacte des pads.
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \caption{Spécifications finales des inductances de puissance sélectionnées pour l'assemblage PCBA.}
+  \label{tab:inductors-selection}
+  \begin{tabularx}{\textwidth}{@{}l c l l c r@{}}
+    \toprule
+    \textbf{Désignateur} & \textbf{Valeur} & \textbf{Empreinte} & \textbf{Référence fabricant} & \textbf{Code LCSC} & \textbf{Courant sat.} \\
+    \midrule
+    L1 (Buck 5V) & \SI{4.7}{\micro\henry} & WE-MAPI 4020 & Würth 74438356047 & C2045367 & \SI{2.5}{\ampere} \\
+    L2 (Buck 3.3V) & \SI{3.3}{\micro\henry} & WE-MAPI 4020 & Würth 74438356033 & C2045382 & \SI{3.0}{\ampere} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Pour le régulateur Buck 3,3\,V (AP63203), le schéma initial spécifiait une valeur nominale de \SI{3.9}{\micro\henry}. Pour l'assemblage réel, l'inductance retenue en boîtier WE-MAPI 4020 est de \SI{3.3}{\micro\henry} (Würth \texttt{74438356033}). Selon la spécification constructeur Diodes Inc. AP63203 \cite{diodes-ap6320x}, la plage d'inductance recommandée s'étend de \SI{2.2}{\micro\henry} à \SI{10}{\micro\henry} pour un courant de sortie jusqu'à \SI{2}{\ampere}. La valeur de \SI{3.3}{\micro\henry} maintient une ondulation de courant acceptable tout en accélérant la réponse dynamique lors des appels de courant des sous-systèmes radio et capteurs.
+
+Ce changement de valeur impose de reprendre l'estimation d'ondulation conduite au \cref{chap:hardware}, qui utilisait la valeur nominale du schéma. En appliquant l'\cref{eq:buck-ripple} aux composants finalement retenus, on obtient les marges du \cref{tab:inductors-margins}.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Ondulation et courant de crête recalculés pour les inductances effectivement sélectionnées, à la charge maximale annoncée de \SI{2}{\ampere}.}
+  \label{tab:inductors-margins}
+  \begin{tabular}{@{}lccccc@{}}
+    \toprule
+    & $L$ retenue & $D$ & $\Delta I_L$ & $I_{L,\mathrm{pic}}$ & $I_{\mathrm{sat}}$ \\
+    \midrule
+    L1 / AP63205 & \SI{4.7}{\micro\henry} & 0,42 & \SI{0.56}{\ampere} & \SI{2.28}{\ampere} & \SI{2.5}{\ampere} \\
+    L2 / AP63203 & \SI{3.3}{\micro\henry} & 0,66 & \SI{0.31}{\ampere} & \SI{2.16}{\ampere} & \SI{3.0}{\ampere} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Deux lectures en découlent. Sur L2, le passage de \SI{3.9}{} à \SI{3.3}{\micro\henry} augmente l'ondulation d'environ \SI{18}{\percent}, mais le courant de crête reste largement en dessous de la saturation de la référence Würth retenue : la substitution ne dégrade pas la marge. Sur L1, en revanche, le courant de crête idéal approche la saturation publiée à moins de \SI{10}{\percent} près. La réserve formulée au \cref{chap:hardware} sur ce rail subsiste donc après la nouvelle sélection : elle n'établit pas une défaillance, puisque le courant réellement consommé par le rail \SI{5}{\volt} n'a pas été caractérisé, mais elle interdit de revendiquer une marge confortable à pleine charge. La mesure du courant de rail et le relevé de la courbe d'inductance sous polarisation figurent parmi les premiers contrôles à conduire au bring-up.
+

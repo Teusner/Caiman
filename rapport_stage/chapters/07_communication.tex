@@ -1,0 +1,226 @@
+\chapter{Simulation de mission, supervision et communication sécurisée}
+\label{chap:communication}
+
+\section{Objectifs et périmètre}
+
+Le délai de fabrication du PCB ne permettait pas d'attendre la carte finale pour étudier le comportement d'une flotte. Un simulateur déterministe a donc été développé afin d'éprouver la logique de mission collective, les contraintes de communication, la supervision, les défauts et la sécurité indépendamment du matériel. Il ne cherche pas à reproduire l'hydrodynamique complète d'un AUV : il constitue un banc d'étude de niveau système, observable et reproductible.
+
+Les objectifs principaux sont les suivants :
+
+\begin{itemize}
+  \item distribuer une mission bathymétrique entre plusieurs véhicules ;
+  \item représenter la perte totale du lien radio lorsqu'un robot est immergé ;
+  \item distinguer l'état interne du modèle des informations réellement reçues par le navire ;
+  \item étudier le stockage différé, les rendez-vous de surface et les relais multi-sauts ;
+  \item spécifier une trame compatible avec la limite physique de 32 octets du nRF24 ;
+  \item tester chiffrement, authentification, anti-rejeu, rotation de clé, commandes et injections de défauts ;
+  \item fournir une interface de démonstration et des exports exploitables hors du programme.
+\end{itemize}
+
+La graine pseudo-aléatoire, les paramètres de flotte et le profil de communication sont explicitement configurables. Deux exécutions utilisant les mêmes paramètres produisent ainsi les mêmes décisions de mission et permettent de comparer les effets d'une perte, d'une portée ou d'un défaut différent.
+
+\section{Architecture logicielle}
+
+L'application est écrite en Python et séparée en composants spécialisés, dont la \cref{fig:sim-architecture} donne l'organisation. L'interface Streamlit ne réalise ni chiffrement ni décision de routage : elle configure le modèle, avance son horloge discrète et affiche des instantanés publics. Cette séparation évite de confondre logique métier et représentation graphique.
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{\textwidth}{!}{%
+  \begin{tikzpicture}[
+      node distance=7mm and 8mm,
+      block/.style={draw=enstablue, rounded corners, align=center, fill=blue!4,
+                    minimum height=8mm, text width=30mm, font=\small},
+      wide/.style={block, text width=48mm},
+      arrow/.style={-{Latex[length=2mm]}, thick, draw=caimanblue}
+    ]
+    \node[wide] (ui) {Interface Streamlit\\paramètres et vues opérateur};
+    \node[wide, below=of ui] (sim) {Coordinateur de simulation\\horloge et états de mission};
+    \node[block, below left=10mm and 39mm of sim] (robot) {Robots\\mouvement, énergie, commandes};
+    \node[block, below left=10mm and 3mm of sim] (bathy) {Bathymétrie\\terrain, sonar, trajectoires};
+    \node[block, below right=10mm and 3mm of sim] (network) {Réseau\\portée, pertes, flooding};
+    \node[block, below right=10mm and 39mm of sim] (security) {Protocole\\codec, clés, anti-rejeu};
+    \node[wide, below=21mm of sim] (logs) {Événements, télémétrie et paquets\\exports CSV et JSON};
+    \draw[arrow] (ui) -- (sim);
+    \draw[arrow] (sim) -- (robot);
+    \draw[arrow] (sim) -- (bathy);
+    \draw[arrow] (sim) -- (network);
+    \draw[arrow] (sim) -- (security);
+    \draw[arrow] (robot) -- (logs);
+    \draw[arrow] (bathy) -- (logs);
+    \draw[arrow] (network) -- (logs);
+    \draw[arrow] (security) -- (logs);
+  \end{tikzpicture}%
+  }
+  \caption{Architecture fonctionnelle du simulateur Caiman.}
+  \label{fig:sim-architecture}
+\end{figure}
+
+Le coordinateur orchestre les modèles de robots, la bathymétrie, le réseau, la station de base et les événements. Le transport est abstrait derrière une même interface : les profils nRF24 de surface, maillage idéal et modems acoustiques exploratoires réutilisent donc la même mission. Cette organisation prépare également le remplacement ultérieur d'un lien simulé par un adaptateur série, UDP ou radio réel.
+
+\section{Mission bathymétrique coordonnée}
+
+La configuration par défaut contient cinq AUV dans une zone de calcul de \SI{1000}{\metre} par \SI{700}{\metre}. Le polygone effectivement levé couvre environ \SI{0.32}{\square\kilo\metre} et le fond synthétique évolue approximativement entre \SI{13}{\metre} et \SI{20}{\metre}. Pour une graine donnée, le terrain reste identique ; il combine pente, bassin, haut-fond, chenal et relief lissé. Il ne s'agit pas d'un relevé hydrographique réel.
+
+Au déploiement, les transects boustrophédon sont répartis entre tous les robots. Chaque véhicule suit une consigne située environ trois mètres au-dessus du fond virtuel, mesure un sonar mono-faisceau de \ang{25} et conserve ses échantillons à bord pendant l'immersion. À cette altitude, l'empreinte physique représentée est de l'ordre de \SI{1.3}{\metre} ; le pourcentage cartographié par le PC correspond toutefois à une grille de reconnaissance soutenue par une trajectoire mesurée à moins de \SI{26}{\metre}, et non à une insonification directe de chaque mètre carré.
+
+La largeur géométrique $d_f$ de l'empreinte d'un faisceau conique d'ouverture $\beta$ à une hauteur $h$ s'obtient par une simple trigonométrie :
+\begin{equation}
+  d_f = 2h\tan\left(\frac{\beta}{2}\right)
+  = 2\times\SI{3}{\metre}\times\tan(\ang{12.5})
+  \approx \SI{1.33}{\metre}.
+  \label{eq:sonar-footprint}
+\end{equation}
+L'ouverture de \ang{25} correspond à la documentation du sonar Ping \cite{bluerobotics-ping}. Ce calcul, directement relié à la navigation robotique, explique pourquoi une carte continue exige interpolation et recouvrement des trajectoires.
+
+Le cycle de mission suit cinq étapes :
+
+\begin{enumerate}
+  \item départ du navire et descente vers les transects assignés ;
+  \item levé autonome avec journalisation locale ;
+  \item rendez-vous de surface, les arrivées anticipées réalisant de petites patrouilles sonar ;
+  \item fusion des mesures datées et départ immédiat vers le bloc suivant ;
+  \item passe coopérative de fermeture des lacunes, retour au navire et déchargement final.
+\end{enumerate}
+
+Tous les AUV participent au levé et deviennent des porteurs de données redondants lors des contacts. La version actuelle n'immobilise donc aucun véhicule dans un rôle permanent de \enquote{mule}. Le navire se pré-positionne près du rendez-vous suivant afin de réduire le temps de synchronisation.
+
+Le modèle énergétique reprend les hypothèses de \SI{12}{\volt}, \SI{56}{\ampere\hour} et \SI{15}{\ampere} de courant moteur moyen. Le quotient idéal de \SI{3.73}{\hour} sert à suivre une tendance ; il ne constitue pas une autonomie annoncée, car l'électronique, les pertes de conversion, les pointes de man\oe{}uvre, les courants et la réserve de sécurité restent à caractériser.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{simulator/mission_after_first_sync.png}
+  \caption{Interface Mission après le premier rendez-vous : 50,1\,\% de la carte de reconnaissance a été synchronisée, puis les cinq AUV sont redevenus radio-silencieux en immersion.}
+  \label{fig:sim-mission-sync}
+\end{figure}
+
+\section{Communication de surface et connaissance du PC}
+
+Le profil principal, \texttt{NRF24\_SURFACE}, interdit tout voisinage radio dès que l'un des deux n\oe{}uds se trouve à plus de \SI{0.5}{\metre} de profondeur. La portée nominale, le débit, les pertes, la latence de base, le TTL et la période de télémétrie restent réglables ; les valeurs par défaut sont respectivement \SI{250}{\metre}, \SI{1}{\mega\bit\per\second}, 3\,\%, \SI{5}{\milli\second}, 8 et \SI{5}{\second}. Les robots immergés stockent donc leurs mesures jusqu'au contact suivant.
+
+Cette règle définit un graphe de communication variable dans le temps. En notant $z_i$ la profondeur positive vers le bas, $\mathbf{p}_i$ la position du n\oe{}ud $i$, $R$ la portée et $\mathcal{I}(t)$ les liens volontairement interrompus, son adjacence s'écrit simplement
+\begin{equation}
+  a_{ij}(t)=
+  \begin{cases}
+    1, & \substack{i,j\text{ actifs},\ z_i(t),z_j(t)\leq \SI{0.5}{\metre},\\
+      \lVert\mathbf{p}_i(t)-\mathbf{p}_j(t)\rVert_2\leq R,\ (i,j)\notin\mathcal{I}(t)},\\[1ex]
+    0, & \text{sinon.}
+  \end{cases}
+  \label{eq:surface-graph}
+\end{equation}
+Avec $R=\SI{250}{\metre}$ par défaut, le graphe disparaît pendant l'immersion puis se reconstruit lors des rendez-vous. Une transmission multi-sauts n'est possible que si ce graphe contient un chemin entre l'émetteur et la station de base ; cette lecture relie directement le simulateur aux architectes de réseaux tolérants aux interruptions et aux réseaux sous-marins contraints \cite{fall2003delay, akyildiz2005underwater}.
+
+Une contrainte importante est la séparation entre la vérité interne du simulateur et ce que le navire peut connaître. Après la plongée, l'interface fige la dernière position reçue par radio et la marque comme \texttt{LAST KNOWN}. Une seconde marque propage seulement la route commandée avec une incertitude croissante ; elle n'expose jamais la position exacte cachée. Lorsque la télémétrie retardée arrive au rendez-vous, les échantillons horodatés reconstruisent la trajectoire réellement parcourue au lieu de dessiner un saut instantané artificiel.
+
+À la surface, les AUV disponibles forment temporairement un backbone redondant. Un flooding contrôlé transmet chaque couple source--séquence une seule fois, applique la portée et les pertes, limite les boucles par TTL et permet à un robot hors portée directe d'atteindre la station par plusieurs sauts. Les ACK et retransmissions sont journalisés séparément des paquets applicatifs.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{simulator/surface_mesh_rendezvous.png}
+  \caption{Vue Network pendant un rendez-vous : quatre AUV sont déjà en surface, les liens actifs et une route multi-sauts vers la base sont visibles.}
+  \label{fig:sim-network-mesh}
+\end{figure}
+
+\section{Trame compacte de 32 octets}
+
+Le codec ne se contente pas de compter une taille logique : il génère des charges physiques de 32 octets, limite exacte du transcepteur nRF24 \cite{nordic-nrf24l01p}. Une télémétrie courante est compactée sur 64 bits : positions $x/y$, profondeur du véhicule et du fond, batterie, qualité de lien, fuite et disponibilité GNSS. La trame est répartie comme suit :
+
+\begin{itemize}
+  \item 8 octets d'en-tête : contrôle, source, destination, séquence, fragment et longueur utile ;
+  \item 8 octets de charge chiffrée ;
+  \item 16 octets pour l'étiquette Poly1305 complète.
+\end{itemize}
+
+Les messages plus longs utilisent au maximum seize fragments, chacun authentifié indépendamment. Les relais retransmettent les 32 octets immuables et conservent TTL et nombre de sauts dans leur politique locale ; ils ne réécrivent donc ni le texte chiffré ni son authentificateur.
+
+La charge applicative occupe ainsi
+\begin{equation}
+  \eta_{\mathrm{app}}=\frac{8}{32}=25\,\%,
+  \qquad
+  N_{\mathrm{frag}}=\left\lceil\frac{B}{8}\right\rceil,
+  \label{eq:frame-efficiency}
+\end{equation}
+où $B$ est la taille du message en octets. La limite de seize fragments porte donc la charge utile logique maximale à 128 octets. Les 75\,\% restants ne sont pas une perte arbitraire : ils portent l'adressage, le séquencement et surtout l'authentification. Il s'agit d'une efficacité de trame applicative, pas d'un rendement mesuré de la couche radio.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{simulator/nrf24_frame_32_bytes.png}
+  \caption{Décomposition octet par octet de la trame nRF24 chiffrée et authentifiée produite par le simulateur.}
+  \label{fig:sim-frame32}
+\end{figure}
+
+Cette spécification est plus avancée que le chemin radio actuel du STM32 : le pilote sait transporter une charge fixe de 32 octets, mais la fragmentation, le codec compact, ChaCha20-Poly1305 et la persistance sûre du compteur de nonce restent à porter dans le firmware final.
+
+\section{Sécurité et scénarios de défaut}
+
+Chaque mission crée une clé maître aléatoire de 256 bits. HKDF-SHA-256 (RFC 5869 \cite{rfc5869}), dont le principe d'extraction puis d'expansion est établi par Krawczyk \cite{krawczyk2010hkdf}, en dérive des matériaux distincts pour le chiffrement, le routage et l'empreinte affichée. ChaCha20-Poly1305 (RFC 8439 \cite{rfc8439}) protège la confidentialité et l'authenticité du contenu. Ce choix repose sur la construction de flux de Bernstein \cite{bernstein2008chacha} et sur le modèle de chiffrement authentifié avec données associées formalisé par Rogaway \cite{rogaway2002authenticated} ; il convient à un microcontrôleur dépourvu d'accélérateur AES. Une séquence monotone par source et un préfixe de mission participent à la construction des nonces. Une fenêtre anti-rejeu rejette les anciennes séquences, tandis qu'un cache élimine les duplications de relais. L'interface n'affiche jamais la clé elle-même, seulement un identifiant et une empreinte tronquée.
+
+La vue Security permet de modifier le texte chiffré, d'altérer l'étiquette AEAD, de corrompre l'authentification de route, de rejouer une ancienne trame et de provoquer une rotation de clé. Elle injecte également la mise hors ligne, une batterie critique, une fuite ou l'isolement réseau d'un robot. Les rejets sont comptés par catégorie afin de ne pas confondre perte de transport, doublon, rejeu et échec d'authentification.
+
+Le scénario de capture physique relie sécurité et contraintes du milieu. Le robot choisi est déclaré capturé et sa clé compromise. Les autres AUV, encore immergés, ne reçoivent aucun rappel fictif : ils poursuivent jusqu'à leur prochain contact de surface, reçoivent alors l'ordre authentifié de retour, sont récupérés, puis reçoivent une nouvelle clé dont le n\oe{}ud capturé est exclu.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{simulator/security_physical_capture.png}
+  \caption{Début du scénario de capture de R1 : clé~1 compromise, rappel encore non reçu sous l'eau et renouvellement en attente.}
+  \label{fig:sim-security-capture}
+\end{figure}
+
+Le choix actuel d'une clé de groupe simplifie la démonstration mais implique que la compromission d'un membre expose le groupe. Une évolution de production devra utiliser une racine propre à chaque véhicule, des clés de trafic par paire et une clé de routage de courte durée distribuée aux seuls membres autorisés.
+
+\section{Interface opérateur, tests et exports}
+
+Le tableau de bord \emph{Caiman Mission Control} regroupe sept vues complémentaires, présentées dans le \cref{tab:sim-views}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Fonctions des vues de supervision.}
+  \label{tab:sim-views}
+  \begin{tabularx}{\textwidth}{@{}l X@{}}
+    \toprule
+    \textbf{Vue} & \textbf{Informations et actions principales} \\
+    \midrule
+    Mission & Bathymétrie reçue, trajectoires synchronisées, dernières positions radio, estimations et route récente. \\
+    Robots & Télémétrie effectivement reçue : âge du fix, profondeur, batterie, fuite et qualité de lien. \\
+    Network & Topologie de surface, liens, routes, latences, trame hexadécimale et disposition des 32 octets. \\
+    Commands & Composition des ordres et suivi des ACK, délais et retransmissions. \\
+    Security & Identité de clé, compteurs, attaques, capture, rotation et défauts. \\
+    Packet Log & Journal filtrable du routage et de la livraison des paquets. \\
+    Events & Chronologie unifiée de mission, réseau, commande, sécurité et défauts. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+La suite automatique actuelle contient 33 tests : 2 pour le codec compact, 5 pour la cryptographie, 5 pour le réseau, 1 pour l'immuabilité au relais, 2 pour l'anti-rejeu et 18 pour la simulation complète. Elle vérifie notamment le déterminisme, la cohérence des capteurs virtuels, la batterie, l'absence de RF sous l'eau, les rendez-vous, le backbone des cinq AUV, les ACK, les retransmissions, les attaques, la rotation de clé et la capture. L'exécution de référence sur \GitCommit{77a253e} se termine par \texttt{33 passed}.
+
+Le bouton d'export produit six fichiers horodatés : télémétrie CSV, paquets CSV, bathymétrie cartographiée CSV, mission complète JSON, configuration JSON et résumé JSON. Ces artefacts permettent une analyse hors ligne et rendent les paramètres d'une démonstration traçables.
+
+\section{Déploiement Web}
+
+Afin de rendre le démonstrateur utilisable sans installer Python, l'application a été conteneurisée puis déployée sur une VPS. Un conteneur Python~3.12 exécute Streamlit sur le port~8501 ; un second conteneur Caddy assure le proxy inverse, la compression et l'exposition HTTP/HTTPS. Un contrôle de santé interroge périodiquement \path{/_stcore/health}. Le domaine configuré est \url{https://caimansim.fr}, avec \url{https://www.caimansim.fr} comme alias.
+
+L'hébergement s'appuie sur une souscription Azure ouverte au titre des crédits étudiants, ce qui conditionne la disponibilité publique à la validité de ces crédits. Le 16 août 2026, l'instance locale reconstruite à partir du dépôt répondait \texttt{200 ok} et a servi aux captures des \cref{fig:sim-mission-sync,fig:sim-network-mesh,fig:sim-frame32,fig:sim-security-capture} ; le DNS public résolvait toujours vers la machine, mais les ports HTTP/HTTPS ne répondaient plus depuis le poste d'audit, l'instance ayant vraisemblablement été suspendue à l'épuisement des crédits. Ce qui est démontré ici est donc la chaîne de déploiement --- conteneurisation, proxy inverse, contrôle de santé, nom de domaine --- et non une disponibilité continue, qui dépend d'un hébergement pérenne restant à financer.
+
+\section{Limites du modèle}
+
+Le terrain reste synthétique, la cinématique ne modélise ni hydrodynamique ni collision détaillée et le passage air--eau de l'antenne est ramené à un seuil binaire. Les profils acoustiques décrivent délais et pertes, pas les formes d'onde ni le DSP d'un modem. Le flooding n'inclut pas la contention du médium et le modèle énergétique ne constitue pas une mesure d'autonomie. Enfin, GNSS et Ping2 restent des données virtuelles tant que leurs pilotes matériels ne sont pas intégrés. Ces limites définissent précisément le passage nécessaire vers le HIL puis vers le PCB final.
+
+\section{Prototype HIL}
+
+Le commit \GitCommit{77a253e} ajoute une implémentation C portable du protocole, une cible ESP32, une cible Raspberry Pi et un modèle du comportement nRF24. Conformément aux principes de la simulation matérielle dans la boucle (Hardware-in-the-Loop, HIL) \cite{monti2017hil}, la version de travail déployée sur le banc organise en outre un scénario bidirectionnel \texttt{node\_node} : l'ESP32 représente le robot R1 et le Raspberry Pi le robot R2. Les deux processeurs sont physiques ; le transport entre eux utilise le Wi-Fi et UDP, tandis que les contraintes principales du nRF24 sont reproduites par logiciel. Cet essai ne valide donc ni l'interface SPI ni les performances radio réelles du nRF24.
+
+Le 16 août 2026, le firmware a été compilé avec ESP-IDF~6.0.2 puis écrit sur un ESP32-D0WDQ6 par l'interface série CP210x. Le second n{\oe}ud est un Raspberry Pi~4 Model~B Rev.~1.5. Le Raspberry s'est connecté au point d'accès \texttt{CAIMAN-HIL} créé par l'ESP32 ; les adresses utilisées étaient respectivement \texttt{192.168.4.2} et \texttt{192.168.4.1}.
+
+Avant l'essai matériel, les deux exécutables natifs ont été recompilés sur le Raspberry avec GCC~14.2.0, CMake~3.31.6 et Mbed TLS~3.6.5. Les deux tests C ont réussi : codec, chiffrement authentifié, altération et anti-rejeu d'une part ; FIFO, interruptions, retransmissions et doublons du modèle nRF24 d'autre part.
+
+La démonstration a ensuite demandé cinq échanges complets R1--R2--R1. Les cinq trames émises par R1 ont été authentifiées et décodées par R2, puis les cinq réponses de R2 ont été authentifiées et décodées par R1. Chaque message conservait une longueur de 32 octets et une charge utile chiffrée/authentifiée, et les numéros de séquence restaient monotones de part et d'autre.
+
+Le banc a été exécuté deux fois dans la journée du 16 août 2026, à partir du même binaire et du même matériel. La première exécution, consignée dans un journal de synthèse, porte les séquences 102416 à 102420 pour R1 et 24577 à 24581 pour R2 ; trois réponses de R2 y ont demandé une retransmission simulée avant \texttt{TX\_DS}, et un \texttt{MAX\_RT} initial sur la séquence 102415 a été observé avant le démarrage du récepteur, hors des cinq cycles demandés. La seconde exécution a fait l'objet d'une capture directe des deux terminaux ; c'est elle qui est reproduite au \cref{chap:validation}, avec des compteurs de séquence propres à cette exécution. Les deux journaux sont conservés dans le dépôt.
+
+Le résultat établit le fonctionnement du protocole portable, de la sécurité et de l'ordonnancement bidirectionnel sur deux processeurs réels. Il reste limité par le remplacement du support nRF24 par un modèle logiciel transporté sur Wi-Fi/UDP et par l'absence de la carte Caiman finale.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{hil/hil_banc_2026-08-16.jpg}
+  \caption{Matériel du banc HIL le 16 août 2026 : à gauche la carte de développement ESP32 sur plaque d'essai, tenant le rôle du robot R1 ; à droite le Raspberry Pi~4 Model~B, tenant celui de R2. La photographie documente les deux n\oe{}uds physiques ; la preuve de l'exécution est fournie par les journaux du banc.}
+  \label{fig:hil-setup}
+\end{figure}

@@ -1,0 +1,93 @@
+\chapter{Stratégie de validation et résultats}
+\label{chap:validation}
+
+La validation est organisée selon cinq niveaux afin de ne pas confondre présence de code, prototype de développement et fonctionnement du système final.
+
+\begin{enumerate}
+  \item \emph{CAO électronique} : contrôles ERC et DRC reproductibles, inspection du schéma, du routage, de la BOM et des fichiers de production, complétés par la revue DFM du fabricant (\cref{sec:drc}).
+  \item \emph{Logiciel de simulation} : 32 tests Python passent sur l'état \GitCommit{4162c87} et 33 sur \GitCommit{77a253e}.
+  \item \emph{Prototype STM32/IMU} : essai exploratoire documenté par photographies, sans mesure métrologique ni validation du matériel final.
+  \item \emph{Prototype de protocole} : compilation et tests C sur Raspberry Pi, flash de l'ESP32 et cinq échanges HIL bidirectionnels authentifiés.
+  \item \emph{PCB final} : aucun test physique, faute de réception avant la date de remise.
+\end{enumerate}
+
+\section{Résultats reproductibles}
+
+Le \cref{tab:validation} associe à chaque résultat annoncé le niveau de preuve effectivement disponible.
+
+\begin{table}[H]
+  \centering
+  \caption{Synthèse du niveau de preuve obtenu.}
+  \label{tab:validation}
+  \begin{tabularx}{\textwidth}{@{}X l X@{}}
+    \toprule
+    \textbf{Résultat} & \textbf{État} & \textbf{Preuve} \\
+    \midrule
+    Zéro erreur ERC bloquante & démontré & KiCad 10.0.5 ; 42 avertissements subsistent. \\
+    Zéro élément PCB non connecté & démontré & DRC de \GitCommit{b58eda6}. \\
+    DRC sans violation bloquante & démontré & 1 clearance résiduelle à \SI{0.1291}{\milli\metre} sur \GitCommit{b58eda6}, au-dessus de la capacité du procédé et documentée en exclusion (\cref{sec:drc}). \\
+    Tests Python du simulateur & démontré & 32/32 sur \GitCommit{4162c87} ; 33/33 sur \GitCommit{77a253e}. \\
+    Banc STM32/ICM-20948 & documenté & NUCLEO-H743ZI2 et module neuf axes photographiés ; résultats seulement qualitatifs. \\
+    Tests C natifs du protocole & démontré & 2/2 tests réussis sur Raspberry Pi~4, GCC~14.2.0 et Mbed TLS~3.6.5. \\
+    HIL ESP32--Raspberry Pi & démontré & 5/5 cycles bidirectionnels R1--R2--R1 ; trames de 32 octets authentifiées et séquences monotones. \\
+    Bring-up PCB Caiman & non réalisé & carte en attente de réception. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Cette synthèse permet ainsi de défendre le travail accompli sans transformer les limites calendaires en résultats techniques inexistants. Les deux sections suivantes détaillent le seul niveau où deux processeurs physiques ont été mis en jeu.
+
+\section{Validation du banc Hardware-in-the-Loop (HIL) bidirectionnel}
+
+Le banc HIL associe deux processeurs physiques : un microcontrôleur ESP32 (représentant l'AUV R1) et un nano-ordinateur Raspberry Pi 4 (représentant l'AUV R2 ou la station de surface). Ce banc valide la chaîne logicielle C embarquée (sérialisation des trames de 32 octets, chiffrement/authentification AEAD ChaCha20-Poly1305, dérivation de clés HKDF et contrôle d'anti-rejeu par numéro de séquence monotone).
+
+Cinq cycles complets d'échange bidirectionnel (\emph{ping-pong} authentifié R1 $\rightarrow$ R2 $\rightarrow$ R1) ont été exécutés avec succès. Les journaux ci-dessous en constituent la trace directe.
+
+Le matériel employé est celui décrit en \cref{fig:hil-setup}. Le \cref{tab:hil-cycles} résume les cinq cycles tels que relevés simultanément sur les deux terminaux : pour chacun, la trame émise par R1 est authentifiée et décodée par R2, qui répond par une trame elle-même authentifiée et décodée par R1, l'acquittement du modèle nRF24 étant confirmé par un \texttt{TX\_DS}.
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{Synthèse des cinq cycles bidirectionnels relevés le 16 août 2026 sur les deux n\oe{}uds physiques.}
+  \label{tab:hil-cycles}
+  \begin{tabular}{@{}ccccccc@{}}
+    \toprule
+    \textbf{Cycle} & \multicolumn{3}{c}{\textbf{R1 $\rightarrow$ R2}} & \multicolumn{3}{c}{\textbf{R2 $\rightarrow$ R1}} \\
+    \cmidrule(lr){2-4}\cmidrule(lr){5-7}
+    & séquence & auth. & \texttt{TX\_DS} & séquence & auth. & \texttt{TX\_DS} \\
+    \midrule
+    1 & 102762 & OK & OK & 32769 & OK & OK \\
+    2 & 102763 & OK & OK & 32770 & OK & OK \\
+    3 & 102764 & OK & OK & 32771 & OK & OK \\
+    4 & 102765 & OK & OK & 32772 & OK & OK \\
+    5 & 102766 & OK & OK & 32773 & OK & OK \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Les séquences sont strictement croissantes de part et d'autre, condition nécessaire au rejet des rejeux. Le \cref{lst:hil-extrait} en donne un cycle représentatif, tel que capturé sur le Raspberry Pi ; les journaux complets des deux n\oe{}uds figurent en \cref{app:evidence}.
+
+\begin{lstlisting}[
+  caption={Cycle 1 relevé sur le n\oe{}ud R2 (Raspberry Pi~4) : réception authentifiée, trame chiffrée de 32 octets, puis réponse acquittée.},
+  label={lst:hil-extrait},
+  basicstyle=\ttfamily\small,
+  frame=single,
+  breaklines=true
+]
+R2 RX PEER_STATE seq=102762 R1->R2 | x=123.9m y=456.9m depth=12.10m
+   bottom=18.55m battery=79.5% link=0% leak=no GNSS=no
+R2 FRAME 32B encrypted=41010201916a00083a07039bff1df48a...
+R2 TX PEER_STATE seq=32769 R2->R1 x=800.0 y=200.0 depth=10.00
+   battery=95.0 link=100%
+R2 TX PEER_STATE seq=32769 -> TX_DS
+\end{lstlisting}
+
+Le journal de R1 se termine par une sixième émission sans destinataire (\texttt{seq=102767 -> MAX\_RT}) : le processus R2 avait été lancé avec \texttt{-{}-count 5} et s'était déjà arrêté. Cette ligne confirme au passage que la détection d'absence d'acquittement fonctionne, les cinq cycles utiles restant complets et acquittés.
+
+\paragraph{Périmètre de validation matérielle.}
+La frontière physique de cette validation se situe aux niveaux suivants :
+\begin{itemize}
+  \item L'ESP32 et le Raspberry Pi exécutent le code C natif de protocole réel.
+  \item Le médium de transport physique intermédiaire utilisé sur ce banc de laboratoire est une liaison Wi-Fi/UDP simulant les paquets radio.
+  \item Le comportement de la puce nRF24L01+ est modélisé de façon logicielle. Par conséquent, l'interface physique SPI et la propagation radio RF réelle avec les antennes sous-marines sur la carte Caiman restent non validées à ce stade.
+\end{itemize}

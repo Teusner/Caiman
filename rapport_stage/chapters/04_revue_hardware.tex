@@ -1,0 +1,87 @@
+\chapter{Conception et revue de l'électronique}
+\label{chap:hardware}
+
+Les contraintes énoncées au \cref{chap:systeme} se traduisent, sur la carte, par un ensemble de choix de composants et de topologies. Ce chapitre en détaille la revue, en partant de la chaîne d'alimentation qui conditionne tout le reste.
+
+\section{Architecture d'alimentation}
+
+L'entrée d'alimentation est protégée par un contrôleur LM74700 avant deux conversions abaisseuses. Un AP63205 génère le rail \SI{5}{\volt}, puis un AP63203 génère le rail \SI{3.3}{\volt}. Les valeurs nominales prévues dans le schéma sont respectivement \SI{4.7}{\micro\henry} pour L1 et \SI{3.9}{\micro\henry} pour L2, conformément aux valeurs typiques proposées dans la documentation de la famille AP6320x \cite{diodes-ap6320x}.
+
+La première nomenclature soumise à JLCPCB associait L1 au Vishay IHLP1616\-BZER4R7M5A et L2 au Sunlord SWPA4030\-S3R9MT. Le premier présente un courant de saturation typique de \SI{1.8}{\ampere} pour une diminution d'inductance d'environ 20\,\% \cite{vishay-ihlp1616}. Pour L2, le fabricant indique un courant de saturation minimal de \SI{3.0}{\ampere} et un courant thermique maximal de \SI{2.1}{\ampere} \cite{sunlord-swpa}. Faute de réception de la carte, ces valeurs restent des données de dimensionnement et non des mesures. Cette sélection a par la suite été revue lors de la préparation de l'assemblage, pour un motif géométrique développé au \cref{sec:inductances}.
+
+La \cref{fig:pcb-3d} donne un aperçu de l'implantation obtenue après routage.
+
+\subsection{Ondulation de courant dans les inductances}
+
+Le modèle idéal d'un convertisseur abaisseur relie le rapport cyclique $D$, l'ondulation crête à crête $\Delta I_L$ et le courant de crête $I_{L,\mathrm{pic}}$ par
+\begin{align}
+  D &\simeq \frac{V_{\mathrm{out}}}{V_{\mathrm{in}}}, \\
+  \Delta I_L &\simeq
+    \frac{V_{\mathrm{out}}\left(1-D\right)}{L f_{\mathrm{sw}}}, \\
+  I_{L,\mathrm{pic}} &\simeq I_{\mathrm{out}} + \frac{\Delta I_L}{2}.
+  \label{eq:buck-ripple}
+\end{align}
+Les AP63203 et AP63205 commutent nominalement à \SI{1.1}{\mega\hertz} \cite{diodes-ap6320x}. En prenant \SI{12}{\volt} comme tension nominale en entrée de L1 et le rail \SI{5}{\volt} comme entrée de L2, le calcul donne les ordres de grandeur du \cref{tab:buck-ripple}.
+
+\begin{table}[H]
+  \centering
+  \caption{Estimation idéale de l'ondulation des deux convertisseurs.}
+  \label{tab:buck-ripple}
+  \begin{tabular}{@{}lccccc@{}}
+    \toprule
+    & $V_{\mathrm{in}}$ & $V_{\mathrm{out}}$ & $L$ & $D$ & $\Delta I_L$ \\
+    \midrule
+    L1 / AP63205 & \SI{12}{\volt} & \SI{5}{\volt} & \SI{4.7}{\micro\henry} & 0,42 & \SI{0.56}{\ampere} \\
+    L2 / AP63203 & \SI{5}{\volt} & \SI{3.3}{\volt} & \SI{3.9}{\micro\henry} & 0,66 & \SI{0.26}{\ampere} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+À la limite de \SI{2}{\ampere} annoncée pour le convertisseur, les pics idéaux seraient donc d'environ \SI{2.28}{\ampere} sur L1 et \SI{2.13}{\ampere} sur L2. Le premier dépasse le courant de saturation typique du composant alors retenu pour L1 (\SI{1.8}{\ampere}) : cela ne démontre pas une défaillance, car le courant réel du rail n'a pas été caractérisé, mais interdit de revendiquer une marge à \SI{2}{\ampere}. Le courant de charge visé, la température et la courbe d'inductance sous polarisation devront être vérifiés au bring-up.
+
+\section{Microcontrôleur et bus}
+
+Le STM32F765VITx centralise les interfaces. Le bus I\textsuperscript{2}C2 relie le LPS22HB, le LIS2MDL et le LSM6DSO, tandis qu'I\textsuperscript{2}C1 est exposé sur un connecteur séparé. Le nRF24 est raccordé à SPI1 avec les signaux CE, CSN et IRQ. La microSD utilise l'interface SDMMC et un contact de détection.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=52mm,keepaspectratio]{fabrication/pcb_3d_top.png}
+    \caption{Vue de face de la carte (composants principaux).}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=52mm,keepaspectratio]{fabrication/pcb_3d_iso.png}
+    \caption{Vue isométrique 3D calculée sous KiCad.}
+  \end{subfigure}
+  \caption{Rendu 3D de l'électronique Caiman généré depuis la révision KiCad du dépôt.}
+  \label{fig:pcb-3d}
+\end{figure}
+
+\section{Corrections traçables et résolution d'anomalies de schéma}
+
+L'audit approfondi du schéma hérité de la base amont et l'historique de versionnement Git mettent en évidence plusieurs corrections matérielles majeures indispensables au bon fonctionnement de la carte. La correction la plus critique de la révision électronique concerne le filtrage d'alimentation du STM32 (commit \GitCommit{dd041de}). Dans le schéma amont, les condensateurs de découplage de \SI{100}{\nano\farad} sur les lignes d'alimentation $V_{\mathrm{DD}}$, $V_{\mathrm{DDA}}$ et $V_{\mathrm{BAT}}$ du microcontrôleur STM32F765VITx étaient insérés par erreur en série sur les rails d'alimentation. Un condensateur en série se comportant comme un isolant en régime permanent (blocage du courant continu), cette topologie coupait l'arrivée de la tension \SI{3.3}{\volt} aux broches 11, 27, 50, 75, 100 et 71 du microcontrôleur, rendant son alimentation et son démarrage physiquement impossibles. La correction a consisté à replacer l'ensemble des condensateurs de découplage ($C_{12}$ à $C_{18}$) en parallèle entre le rail \SI{3.3}{\volt} et la masse (GND), rétablissant ainsi la continuité de l'alimentation DC tout en assurant le filtrage des parasites haute fréquence conformément au manuel de référence STMicroelectronics \cite{stmicro-stm32f765}. La \cref{fig:stm32-decoupling-comparison} compare les deux topologies.
+
+Par ailleurs, la correction du type électrique de la masse du capteur inertiel LSM6DSO (commit \GitCommit{c66b3fb}) a résolu un conflit dans la matrice d'interconnexion KiCad causé par une broche de masse associée à une déclaration inadaptée. De même, la suppression des drapeaux d'alimentation superflus (commit \GitCommit{2be6335}) a permis d'assainir la déclaration des équipotentielles et la vérification des règles électriques. Grâce à ces interventions sur la saisie de schéma, les erreurs du vérificateur électrique (ERC) sous KiCad 10.0.5 passent de 10 erreurs bloquantes dans la révision initiale à zéro dans la version finale transmise à la fabrication, 42 avertissements mineurs subsistant. Le schéma complet après ces corrections est reproduit en \cref{app:evidence}, dans une taille permettant d'y localiser les points discutés ci-dessus.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.92\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=98mm,keepaspectratio]{fabrication/stm32_decoupling_capacitors_before.png}
+    \caption{Schéma amont hérité : condensateurs de \SI{100}{\nano\farad} en série sur les lignes $V_{\mathrm{DD}}$, ce qui bloque le courant continu.}
+  \end{subfigure}
+
+  \vspace{6mm}
+
+  \begin{subfigure}[t]{0.92\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,height=98mm,keepaspectratio]{fabrication/stm32_decoupling_capacitors_fix.png}
+    \caption{Schéma révisé (commit \GitCommit{dd041de}) : condensateurs replacés en parallèle entre le rail et la masse.}
+  \end{subfigure}
+  \caption{Comparaison avant/après de la correction du découplage d'alimentation du STM32 sous KiCad.}
+  \label{fig:stm32-decoupling-comparison}
+\end{figure}
+

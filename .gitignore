@@ -3,3 +3,26 @@
 **/__pycache__/
 **/*.py[cod]
 *.log
+rapport_stage/*Convention*.pdf
+
+# Backups locais do KiCad e arquivos de trabalho
+electronics/*.bak-*
+electronics/.history/
+electronics/~*.lck
+electronics/_restore_backup_*/
+
+# Captura bruta com endereco de e-mail de terceiro (versoes recortadas em figures/)
+rapport_stage/qqq.png
+
+# Auxiliares de compilacao LaTeX na raiz do rapport
+rapport_stage/main.aux
+rapport_stage/main.bbl
+rapport_stage/main-blx.bib
+rapport_stage/main.run.xml
+
+# Redundantes: JPEG ja recortada em figures/hil, MOV da Live Photo inutil
+rapport_stage/figures/originals/hil/Fotos_do_iCloud.zip
+rapport_stage/Fotos do iCloud/
+
+# Copia identica de main.pdf (gerada para upload no Moodle)
+rapport_stage/DA-SILVA-BEZERRA_Joab_Rapport_PRe.pdf
