@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "author": "Caiman",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-st-nucleo-c031c6", "id": "nucleo", "top": 0, "left": 0, "attrs": {} },
+    { "type": "chip-caiman-lsm6dsoa", "id": "imu", "top": -96, "left": 246, "attrs": {} },
+    { "type": "chip-caiman-lis2mdla", "id": "mag", "top": 28, "left": 246, "attrs": {} },
+    { "type": "chip-caiman-lps22hba", "id": "baro", "top": 152, "left": 246, "attrs": {} },
+    { "type": "chip-caiman-bar30a", "id": "bar30", "top": 276, "left": 246, "attrs": {} },
+    { "type": "chip-caiman-nrf24a", "id": "rf", "top": -164, "left": 484, "attrs": {} },
+    { "type": "wokwi-potentiometer", "id": "potVbat", "top": 250, "left": -128, "attrs": { "value": "512" } },
+    { "type": "wokwi-potentiometer", "id": "potVchg", "top": 350, "left": -128, "attrs": { "value": "256" } },
+    { "type": "wokwi-servo", "id": "escL", "top": 455, "left": 194, "attrs": {} },
+    { "type": "wokwi-servo", "id": "escR", "top": 455, "left": 334, "attrs": {} },
+    { "type": "wokwi-logic-analyzer", "id": "logic", "top": -124, "left": -160, "attrs": {} }
+  ],
+  "connections": [
+    [ "$serialMonitor:TX", "nucleo:PA3", "", [] ],
+    [ "$serialMonitor:RX", "nucleo:PA2", "", [] ],
+
+    [ "nucleo:3V3.2", "imu:VCC", "red", [ "v0" ] ],
+    [ "nucleo:GND.9", "imu:GND", "black", [ "v0" ] ],
+    [ "nucleo:D15", "imu:SCL", "green", [ "v0" ] ],
+    [ "nucleo:D14", "imu:SDA", "blue", [ "v0" ] ],
+
+    [ "nucleo:3V3.2", "mag:VCC", "red", [ "v0" ] ],
+    [ "nucleo:GND.9", "mag:GND", "black", [ "v0" ] ],
+    [ "nucleo:D15", "mag:SCL", "green", [ "v0" ] ],
+    [ "nucleo:D14", "mag:SDA", "blue", [ "v0" ] ],
+
+    [ "nucleo:3V3.2", "baro:VCC", "red", [ "v0" ] ],
+    [ "nucleo:GND.9", "baro:GND", "black", [ "v0" ] ],
+    [ "nucleo:D15", "baro:SCL", "green", [ "v0" ] ],
+    [ "nucleo:D14", "baro:SDA", "blue", [ "v0" ] ],
+
+    [ "nucleo:3V3.2", "bar30:VCC", "red", [ "v0" ] ],
+    [ "nucleo:GND.9", "bar30:GND", "black", [ "v0" ] ],
+    [ "nucleo:D15", "bar30:SCL", "green", [ "v0" ] ],
+    [ "nucleo:D14", "bar30:SDA", "blue", [ "v0" ] ],
+
+    [ "nucleo:3V3.2", "rf:VCC", "red", [ "v0" ] ],
+    [ "nucleo:GND.9", "rf:GND", "black", [ "v0" ] ],
+    [ "nucleo:D13", "rf:SCK", "green", [ "v0" ] ],
+    [ "nucleo:D11", "rf:MOSI", "blue", [ "v0" ] ],
+    [ "nucleo:D12", "rf:MISO", "purple", [ "v0" ] ],
+    [ "nucleo:D10", "rf:CSN", "orange", [ "v0" ] ],
+    [ "nucleo:D9", "rf:CE", "gray", [ "v0" ] ],
+    [ "nucleo:D8", "rf:IRQ", "yellow", [ "v0" ] ],
+
+    [ "potVbat:VCC", "nucleo:3V3.2", "red", [ "v0" ] ],
+    [ "potVbat:GND", "nucleo:GND.5", "black", [ "v0" ] ],
+    [ "potVbat:SIG", "nucleo:A0", "orange", [ "v0" ] ],
+
+    [ "potVchg:VCC", "nucleo:3V3.2", "red", [ "v0" ] ],
+    [ "potVchg:GND", "nucleo:GND.5", "black", [ "v0" ] ],
+    [ "potVchg:SIG", "nucleo:A1", "orange", [ "v0" ] ],
+
+    [ "escL:V+", "nucleo:5V", "red", [ "v0" ] ],
+    [ "escL:GND", "nucleo:GND.5", "black", [ "v0" ] ],
+    [ "escL:PWM", "nucleo:D5", "orange", [ "v0" ] ],
+    [ "escR:V+", "nucleo:5V", "red", [ "v0" ] ],
+    [ "escR:GND", "nucleo:GND.5", "black", [ "v0" ] ],
+    [ "escR:PWM", "nucleo:D4", "orange", [ "v0" ] ],
+
+    [ "logic:D0", "nucleo:D15", "green", [ "v0" ] ],
+    [ "logic:D1", "nucleo:D14", "blue", [ "v0" ] ],
+    [ "logic:D2", "nucleo:D13", "green", [ "v0" ] ],
+    [ "logic:D3", "nucleo:D11", "blue", [ "v0" ] ],
+    [ "logic:D4", "nucleo:D12", "purple", [ "v0" ] ],
+    [ "logic:D5", "nucleo:D10", "orange", [ "v0" ] ],
+    [ "logic:D6", "nucleo:D5", "orange", [ "v0" ] ],
+    [ "logic:D7", "nucleo:D6", "pink", [ "v0" ] ],
+    [ "logic:GND", "nucleo:GND.9", "black", [ "v0" ] ]
+  ]
+}

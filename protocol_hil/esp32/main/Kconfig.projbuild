@@ -1,0 +1,80 @@
+menu "Caiman protocol HIL"
+
+config CAIMAN_WIFI_SSID
+    string "SoftAP SSID"
+    default "CAIMAN-HIL"
+
+config CAIMAN_WIFI_PASSWORD
+    string "SoftAP password"
+    default "caiman-test"
+
+config CAIMAN_UDP_PORT
+    int "UDP protocol port"
+    range 1024 65535
+    default 4210
+
+config CAIMAN_DEBUG_UDP_PORT
+    int "Out-of-band HIL diagnostic UDP port"
+    range 1024 65535
+    default 4211
+
+config CAIMAN_RX_LED_GPIO
+    int "GPIO for the radio activity LED"
+    range 0 33
+    default 2
+
+config CAIMAN_TELEMETRY_PERIOD_MS
+    int "Telemetry publication period in milliseconds"
+    range 100 60000
+    default 1000
+
+choice CAIMAN_NRF_RATE
+    prompt "Simulated nRF24 data rate"
+    default CAIMAN_NRF_RATE_250K
+
+config CAIMAN_NRF_RATE_250K
+    bool "250 kbps"
+
+config CAIMAN_NRF_RATE_1M
+    bool "1 Mbps"
+
+config CAIMAN_NRF_RATE_2M
+    bool "2 Mbps"
+
+endchoice
+
+config CAIMAN_NRF_AUTO_ACK
+    bool "Simulate Enhanced ShockBurst Auto-ACK"
+    default y
+
+config CAIMAN_NRF_RETRY_COUNT
+    int "Auto retransmit count (ARC)"
+    range 0 15
+    default 3
+
+config CAIMAN_NRF_RETRY_DELAY_US
+    int "Auto retransmit delay in microseconds (ARD)"
+    range 250 4000
+    default 500
+
+config CAIMAN_NRF_LOSS_PERCENT
+    int "Base packet loss percentage"
+    range 0 100
+    default 0
+
+config CAIMAN_NRF_INTERFERENCE_PERCENT
+    int "Additional interference loss percentage"
+    range 0 100
+    default 0
+
+config CAIMAN_NRF_DISTANCE_M
+    int "Simulated separation in metres"
+    range 0 10000
+    default 1
+
+config CAIMAN_NRF_RANGE_M
+    int "Simulated maximum radio range in metres"
+    range 1 10000
+    default 100
+
+endmenu

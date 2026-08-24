@@ -1,0 +1,5 @@
+{
+  "name": "caiman-lps22hba",
+  "author": "Caiman",
+  "pins": ["VCC", "GND", "SCL", "SDA"]
+}

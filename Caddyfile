@@ -1,0 +1,9 @@
+caimansim.fr, www.caimansim.fr {
+	encode zstd gzip
+	reverse_proxy simulator:8501
+}
+
+http://68.221.16.155 {
+	encode zstd gzip
+	reverse_proxy simulator:8501
+}

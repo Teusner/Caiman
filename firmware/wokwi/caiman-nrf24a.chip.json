@@ -1,0 +1,5 @@
+{
+  "name": "caiman-nrf24a",
+  "author": "Caiman",
+  "pins": ["VCC", "GND", "SCK", "MOSI", "MISO", "CSN", "CE", "IRQ"]
+}

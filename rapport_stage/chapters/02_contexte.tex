@@ -1,0 +1,31 @@
+\chapter{Environnement du stage}
+\label{chap:contexte}
+
+Le stage s'est déroulé du 1\textsuperscript{er} juin au 31 août 2026 au Lab-STICC (UMR CNRS 6285), sur le campus de Brest de l'ENSTA, dans l'équipe ROBEX. La convention désigne juridiquement le CNRS comme organisme d'accueil et le Lab-STICC comme unité d'accueil. Le stage s'inscrit dans la deuxième année du diplôme d'ingénieur de l'ENSTA, spécialité Robotique autonome, promotion 2027. Le laboratoire traite notamment de perception, de robotique d'exploration autonome et d'architectures matérielles et logicielles embarquées \cite{ensta-laboratories}.
+
+Franck Ruffier, directeur de recherche CNRS en robotique dans l'équipe ROBEX du Lab-STICC, était le tuteur institutionnel du stage. Ses travaux portent en particulier sur la robotique bio-inspirée et frugale \cite{ensta-ruffier}. Quentin Brateau, présenté par l'ENSTA comme doctorant en robotique marine, a assuré l'accompagnement technique quotidien du projet sans être le tuteur désigné par la convention \cite{ensta-robotique-autonome}. Philippe Xu y figure comme enseignant-chercheur référent pour l'ENSTA.
+
+\section{Positionnement du projet}
+
+Caiman s'inscrit dans un contexte de robotique marine distribuée. Le système étudié doit permettre à plusieurs véhicules de collecter des données bathymétriques, de conserver une estimation locale de leur mission et d'échanger des messages lorsqu'une liaison radio de surface devient disponible.
+
+Le sujet administratif, intitulé \enquote{Conception d'un essaim de robots subsurface}, couvrait un périmètre étendu : conception et programmation de l'électronique embarquée, fabrication de plusieurs robots, algorithme de contrôle d'essaim et essais en bassin puis en milieu naturel. Le Tableau~\ref{tab:objectifs-convention} récapitule la traçabilité entre la convention administrative et les réalisations effectives du PRe.
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \caption{Synthèse de traçabilité entre les missions de la convention et le travail réalisé.}
+  \label{tab:objectifs-convention}
+  \begin{tabularx}{\textwidth}{@{}X l X@{}}
+    \toprule
+    \textbf{Mission prévue par la convention} & \textbf{État à la fin du PRe} & \textbf{Résultat / Justification} \\
+    \midrule
+    Conception & Réalisé & Schéma corrigé, routage revu et fichiers de fabrication JLCPCB validés. \\
+    Programmation embarquée & Partiel & Architecture C/STM32 et pilote nRF24 modélisé (pas de bring-up PCB final). \\
+    Fabrication des robots & Non réalisée & Carte Caiman commandée mais non reçue avant la fin du stage. \\
+    Contrôle d'essaim & Simulé & Simulateur Python/Streamlit déterministe (5 AUV, 32 octets AEAD). \\
+    Banc de test matériel & Réalisé & Prototype HIL bidirectionnel (ESP32 / Raspberry Pi) avec 5 cycles validés. \\
+    Essais en bassin / milieu naturel & Non réalisés & Hors périmètre temporel (absence de matériel PCB assemblé). \\
+    \bottomrule
+  \end{tabularx}
+\end{table}

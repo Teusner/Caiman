@@ -1,0 +1,5 @@
+{
+  "name": "caiman-lis2mdla",
+  "author": "Caiman",
+  "pins": ["VCC", "GND", "SCL", "SDA"]
+}

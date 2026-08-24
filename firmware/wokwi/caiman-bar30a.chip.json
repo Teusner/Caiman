@@ -1,0 +1,5 @@
+{
+  "name": "caiman-bar30a",
+  "author": "Caiman",
+  "pins": ["VCC", "GND", "SCL", "SDA"]
+}

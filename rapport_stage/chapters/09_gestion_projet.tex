@@ -1,0 +1,42 @@
+\chapter{Gestion du projet et retour d'expérience}
+\label{chap:gestion}
+
+\section{Déroulement et planning}
+
+Le stage s'étend du 1\textsuperscript{er} juin au 31 août 2026. Juin regroupe la prise en main expérimentale STM32/IMU, la correction du schéma et du PCB ainsi que la commande. Juillet est consacré au simulateur de flotte, à sa supervision Web, au scénario de capture et à son déploiement, puis au premier HIL. La reproduction physique du HIL, la rédaction et la préparation de la soutenance occupent le mois d'août. La \cref{fig:gantt} en donne la répartition.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{ganttchart}[
+    hgrid,
+    vgrid,
+    x unit=2.65cm,
+    title/.style={fill=enstablue!15},
+    bar/.style={fill=caimanblue}
+  ]{1}{3}
+    \gantttitle{2026}{3} \\
+    \gantttitle{Juin}{1}\gantttitle{Juillet}{1}\gantttitle{Août}{1} \\
+    \ganttbar{Schéma et PCB}{1}{1} \\
+    \ganttbar{Firmware}{1}{2} \\
+    \ganttbar{Simulation}{2}{2} \\
+    \ganttbar{HIL et rédaction}{2}{3}
+  \end{ganttchart}
+  \caption{Planning du stage reconstruit à partir de l'historique Git et des essais documentés.}
+  \label{fig:gantt}
+\end{figure}
+
+\section{Difficultés rencontrées et inflexions du projet}
+
+Trois écarts entre le plan initial et le déroulement réel méritent d'être exposés, moins pour eux-mêmes que pour les pratiques de travail qu'ils ont fait évoluer.
+
+Le premier tient au délai de fabrication. La commande a été lancée le 23 juin, mais les délais cumulés de production et d'assemblage ne permettaient pas la réception avant la soutenance du \DefenseDate. La mission prévue par la convention --- fabriquer plusieurs robots puis les essayer en bassin --- devenait matériellement inatteignable. Plutôt que de laisser le projet en attente, la validation a été redirigée vers ce qui pouvait être éprouvé sans la carte : le protocole, son codage compact, sa sécurisation et son comportement en flotte. C'est de là que sont nés le simulateur puis le banc HIL. Cette réorientation ne contourne pas l'objectif, elle déplace le périmètre vérifiable ; elle impose en revanche de ne jamais présenter un résultat de simulation comme un résultat matériel, exigence qui a guidé la structuration du \cref{chap:validation}.
+
+Le deuxième porte sur la sélection des composants. La revue PCBA du fabricant a détecté que les inductances de puissance présélectionnées, bien que de gabarit annoncé équivalent, présentaient des terminaisons débordant du \emph{land pattern} dessiné (\cref{sec:inductances}). Cette présélection reposait sur l'hypothèse implicite qu'un boîtier \enquote{$4\times4$\,mm} suffisait à caractériser un composant. La reprise a exigé de comparer, pour chaque candidat, la valeur d'inductance, le courant de saturation, la DCR et surtout la géométrie exacte des plages de brasage. La leçon est concrète : une nomenclature n'est pas une liste de valeurs, mais un ensemble d'engagements géométriques.
+
+Le troisième est apparu lors d'un changement de poste de travail en cours de projet. Il a mis en évidence que tout ce qui conditionne la reproductibilité d'une commande --- règles de conception, liste d'exclusions DRC justifiées, dossier de production exporté, correspondance entre une révision et les fichiers réellement transmis --- doit être versionné au même titre que le schéma. Un fichier de production qui n'existe que sur un poste ne constitue pas une preuve. De là découle une règle de conduite retenue pour la suite. Le contrôle DRC doit être traité comme une condition de sortie de l'export de fabrication : réexécuté sur l'état exact qui alimente les fichiers transmis, puis archivé avec la commande. Il ne peut pas être considéré comme une étape franchie une fois pour toutes en cours de routage.
+
+\section{Compétences mobilisées}
+
+Le stage a mobilisé de manière transversale les disciplines clés du cursus d'ingénieur en robotique autonome. L'architecture des microcontrôleurs a été sollicitée par le firmware STM32, ses périphériques SPI/I\textsuperscript{2}C/UART et son ordonnancement FreeRTOS. La théorie du signal et de l'estimation intervient dans le filtrage complémentaire de l'\cref{eq:complementary-filter} et la modélisation du sonar de l'\cref{eq:sonar-footprint}. L'ingénierie des réseaux et de la communication contrainte apparaît enfin dans les trames de 32 octets, le routage distribué de l'\cref{eq:surface-graph} et la tolérance aux pannes. La démarche d'ingénierie système s'est appuyée sur les pratiques du génie logiciel : gestion de version, modularité du simulateur, journalisation et validation automatisée par tests unitaires et banc matériel.
+
+Au-delà des techniques, l'apport principal de ce stage réside dans la qualification du statut des affirmations produites. Distinguer ce qui est conçu, implémenté, testé et validé ne relève pas de la précaution rhétorique : c'est la condition pour qu'un tiers sache sur quoi il peut s'appuyer. Cette exigence a façonné la structure même du présent rapport.

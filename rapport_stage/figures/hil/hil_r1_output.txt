@@ -1,0 +1,17 @@
+ESP32 HIL diagnostic events on UDP 4211
+R1 TX PEER_STATE seq=102762 payload=8B frame=32B -> TX_DS
+R1 RX PEER_STATE seq=32769 R2->R1 x=800.0 y=200.0 depth=10.00
+   battery=95.0 link=100%
+R1 TX PEER_STATE seq=102763 payload=8B frame=32B -> TX_DS
+R1 RX PEER_STATE seq=32770 R2->R1 x=799.7 y=200.4 depth=10.08
+   battery=94.5 link=73%
+R1 TX PEER_STATE seq=102764 payload=8B frame=32B -> TX_DS
+R1 RX PEER_STATE seq=32771 R2->R1 x=799.4 y=200.8 depth=10.16
+   battery=94.0 link=73%
+R1 TX PEER_STATE seq=102765 payload=8B frame=32B -> TX_DS
+R1 RX PEER_STATE seq=32772 R2->R1 x=799.1 y=201.2 depth=10.24
+   battery=93.5 link=73%
+R1 TX PEER_STATE seq=102766 payload=8B frame=32B -> TX_DS
+R1 RX PEER_STATE seq=32773 R2->R1 x=798.8 y=201.6 depth=10.32
+   battery=93.0 link=73%
+R1 TX PEER_STATE seq=102767 frame=32B -> MAX_RT

@@ -1,0 +1,18 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "../../shared/src/caiman_protocol.c"
+        "../../shared/src/nrf24_sim.c"
+    INCLUDE_DIRS
+        "."
+        "../../shared/include"
+    REQUIRES
+        esp_driver_gpio
+        esp_event
+        esp_netif
+        esp_timer
+        esp_wifi
+        lwip
+        mbedtls
+        nvs_flash
+)

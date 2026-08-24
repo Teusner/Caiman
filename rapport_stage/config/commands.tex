@@ -1,0 +1,49 @@
+\newcommand{\TODOJOAB}[1]{%
+  \textcolor{todoorange}{\textbf{TODO\_JOAB :} #1}%
+}
+
+\newcommand{\GitCommit}[1]{\texttt{#1}}
+\newcommand{\RepositoryPath}[1]{\texttt{#1}}
+
+\newcommand{\EvidenceStatus}[1]{%
+  \begingroup
+  \setlength{\fboxsep}{2pt}%
+  \colorbox{enstablue!10}{\textcolor{enstablue}{\textbf{#1}}}%
+  \endgroup
+}
+
+\newcommand{\LogoOrPlaceholder}[3][32mm]{%
+  \IfFileExists{#2}{%
+    \includegraphics[width=#1]{#2}%
+  }{%
+    \fbox{\parbox[c][18mm][c]{\dimexpr#1-2\fboxsep-2\fboxrule\relax}{\centering\footnotesize #3}}%
+  }%
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE]{\small\nouppercase{\leftmark}}
+\fancyhead[RO]{\small\nouppercase{\rightmark}}
+\fancyfoot[LE,RO]{\thepage}
+\fancyfoot[LO,RE]{\small\StudentName\ -- \HostShortName\ -- \ConfidentialityShort}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.2pt}
+
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyfoot[LE,RO]{\thepage}
+  \fancyfoot[LO,RE]{\small\StudentName\ -- \HostShortName\ -- \ConfidentialityShort}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0.2pt}
+}
+
+\crefname{figure}{figure}{figures}
+\crefname{table}{tableau}{tableaux}
+\crefname{chapter}{chapitre}{chapitres}
+\crefname{section}{section}{sections}
+\crefname{equation}{équation}{équations}
+\Crefname{equation}{Équation}{Équations}
+\crefname{appendix}{annexe}{annexes}
+\Crefname{appendix}{Annexe}{Annexes}
+\crefname{lstlisting}{listing}{listings}
+\Crefname{lstlisting}{Listing}{Listings}
